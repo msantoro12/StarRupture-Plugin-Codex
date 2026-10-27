@@ -1,5 +1,6 @@
 #include "codex_ui.h"
 #include "Recipes/codex_recipes.h"
+#include "Planner/codex_planner.h"
 #include "Icons/codex_icons.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
@@ -789,6 +790,11 @@ namespace CodexUI
 				imgui->SetItemTooltip("All pin slots are in use - unpin a recipe first.");
 			else if (!pinned)
 				imgui->SetItemTooltip("Keep this recipe on screen while you play.");
+
+			imgui->SameLine(0.0f, -1.0f);
+			if (imgui->SmallButton("Launch planner"))
+				CodexPlanner::Launch(info.output.uniqueItemName, info.output.displayName);
+			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());

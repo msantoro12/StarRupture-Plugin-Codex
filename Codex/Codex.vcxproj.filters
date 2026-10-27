@@ -27,6 +27,11 @@
       <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000005}</UniqueIdentifier>
     </Filter>
 
+    <!-- Launch planner button (item id mapping + URL building) -->
+    <Filter Include="Planner">
+      <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000007}</UniqueIdentifier>
+    </Filter>
+
     <!-- Codex search box + recipe detail UI -->
     <Filter Include="UI">
       <UniqueIdentifier>{a1b2c3d4-0001-0001-0001-000000000006}</UniqueIdentifier>
@@ -69,6 +74,11 @@
       <Filter>Recipes</Filter>
     </ClInclude>
 
+    <!-- Planner -->
+    <ClInclude Include="Planner\codex_planner.h">
+      <Filter>Planner</Filter>
+    </ClInclude>
+
     <!-- UI -->
     <ClInclude Include="UI\codex_ui.h">
       <Filter>UI</Filter>
@@ -107,6 +117,11 @@
     <!-- Recipes -->
     <ClCompile Include="Recipes\codex_recipes.cpp">
       <Filter>Recipes</Filter>
+    </ClCompile>
+
+    <!-- Planner -->
+    <ClCompile Include="Planner\codex_planner.cpp">
+      <Filter>Planner</Filter>
     </ClCompile>
 
     <!-- UI -->

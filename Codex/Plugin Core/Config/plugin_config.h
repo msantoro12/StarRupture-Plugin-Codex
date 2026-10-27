@@ -25,6 +25,20 @@ namespace CodexConfig
 			ConfigValueType::Keybind,
 			"Shift+N",
 			"Key to open (or close) the full Codex window"
+		},
+		{
+			"Planner",
+			"Planner",
+			ConfigValueType::String,
+			"StarRupture Planner",
+			"Planner the Launch planner button opens: \"StarRupture Planner\" or \"Custom\""
+		},
+		{
+			"Planner",
+			"CustomUrlTemplate",
+			ConfigValueType::String,
+			"",
+			"Custom planner address; {item} becomes the item's planner id"
 		}
 	};
 
@@ -70,6 +84,24 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "CodexKey", buffer, sizeof(buffer), "Shift+N"))
 				return buffer;
 			return "Shift+N";
+		}
+
+		// Returns which planner the Launch planner button opens: "StarRupture Planner" (default) or "Custom".
+		static const char* GetPlanner()
+		{
+			static char buffer[64];
+			if (s_self && s_self->config->ReadString(s_self, "Planner", "Planner", buffer, sizeof(buffer), "StarRupture Planner"))
+				return buffer;
+			return "StarRupture Planner";
+		}
+
+		// Returns the custom planner URL template; {item} stands for the item's planner id.
+		static const char* GetPlannerUrlTemplate()
+		{
+			static char buffer[512];
+			if (s_self && s_self->config->ReadString(s_self, "Planner", "CustomUrlTemplate", buffer, sizeof(buffer), ""))
+				return buffer;
+			return "";
 		}
 
 	private:
