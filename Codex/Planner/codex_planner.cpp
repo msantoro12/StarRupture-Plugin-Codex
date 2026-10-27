@@ -6,8 +6,6 @@
 #include <cstring>
 #include <unordered_map>
 
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
 #include <shellapi.h>
 
 namespace CodexPlanner
@@ -15,6 +13,7 @@ namespace CodexPlanner
 	namespace
 	{
 		constexpr const char* kDefaultPlannerBaseUrl = "https://starrupture.goodstuff.software/";
+		constexpr const char* kDefaultPlannerName = "StarRupture Planner";
 		constexpr const char* kItemPlaceholder = "{item}";
 		constexpr int         kTargetRatePerMinute = 60;
 		constexpr size_t      kMaxUrlLength = 2048;
@@ -247,8 +246,8 @@ namespace CodexPlanner
 		}
 
 		// The only URLs the shell is ever given: http(s), printable ASCII, and
-		// none of the characters that could break out of the browser's command
-		// line (quote, angle brackets, backslash, caret, backtick, pipe, braces).
+		// none of quote, angle brackets, backslash, caret, backtick, pipe or
+		// braces, which could break out of the browser's command line.
 		bool IsSafeUrl(const std::string& url)
 		{
 			const bool https = _strnicmp(url.c_str(), "https://", 8) == 0;
@@ -267,7 +266,8 @@ namespace CodexPlanner
 
 		std::string BuildUrl(const std::string& plannerId)
 		{
-			if (_stricmp(CodexConfig::Config::GetPlanner(), "Custom") == 0)
+			const char* planner = CodexConfig::Config::GetPlanner();
+			if (_stricmp(planner, "Custom") == 0)
 			{
 				std::string url = CodexConfig::Config::GetPlannerUrlTemplate();
 				const std::string item = UrlEncode(plannerId);
@@ -276,6 +276,9 @@ namespace CodexPlanner
 					url.replace(pos, placeholderLength, item);
 				return url;
 			}
+
+			if (_stricmp(planner, kDefaultPlannerName) != 0)
+				LOG_WARN("CodexPlanner: unknown Planner '%s'; using the %s.", planner, kDefaultPlannerName);
 
 			std::string url = kDefaultPlannerBaseUrl;
 			if (!plannerId.empty())
@@ -294,7 +297,7 @@ namespace CodexPlanner
 		const std::string url = BuildUrl(plannerId);
 		if (!IsSafeUrl(url))
 		{
-			LOG_WARN("CodexPlanner: not opening '%s'; the planner URL must be http:// or https:// with no spaces or quotes. Check Planner/CustomUrlTemplate.",
+			LOG_WARN("CodexPlanner: not opening '%s'; the planner URL must be http:// or https:// with printable ASCII and no spaces, quotes or braces. Check Planner/CustomUrlTemplate.",
 				url.c_str());
 			return;
 		}
@@ -304,8 +307,12 @@ namespace CodexPlanner
 		const INT_PTR result = reinterpret_cast<INT_PTR>(
 			ShellExecuteW(nullptr, L"open", wideUrl.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
 		if (result <= 32)
+		{
 			LOG_WARN("CodexPlanner: could not open the browser (ShellExecute error %d) for %s", static_cast<int>(result), url.c_str());
+		}
 		else
+		{
 			LOG_DEBUG("CodexPlanner: opened %s", url.c_str());
+		}
 	}
 }

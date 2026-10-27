@@ -23,6 +23,9 @@ what it produces.
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
 - **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. Pinned
   windows never block game input; open the Codex (`N`) to drag them around or unpin them.
+- **Launch planner** -- the recipe tab has a button that opens a production planner for the
+  recipe's output in your browser. The StarRupture Planner is the default; set `Planner` to
+  `Custom` and give `CustomUrlTemplate` an address with `{item}` for another planner.
 - **Configurable** -- enable/disable the plugin and rebind the search key from the mod
   loader's config file.
 
@@ -35,6 +38,8 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
+| `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner` or `Custom` |
+| `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`; `{item}` becomes the item's planner id, e.g. `https://example.com/plan?item={item}` |
 
 ---
 

@@ -90,7 +90,7 @@ namespace CodexConfig
 		static const char* GetPlanner()
 		{
 			static char buffer[64];
-			if (s_self && s_self->config->ReadString(s_self, "Planner", "Planner", buffer, sizeof(buffer), "StarRupture Planner"))
+			if (s_self && s_self->config->ReadString(s_self, "Planner", "Planner", buffer, sizeof(buffer) - 1, "StarRupture Planner"))
 				return buffer;
 			return "StarRupture Planner";
 		}
@@ -99,7 +99,7 @@ namespace CodexConfig
 		static const char* GetPlannerUrlTemplate()
 		{
 			static char buffer[512];
-			if (s_self && s_self->config->ReadString(s_self, "Planner", "CustomUrlTemplate", buffer, sizeof(buffer), ""))
+			if (s_self && s_self->config->ReadString(s_self, "Planner", "CustomUrlTemplate", buffer, sizeof(buffer) - 1, ""))
 				return buffer;
 			return "";
 		}
