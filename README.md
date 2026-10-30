@@ -33,9 +33,12 @@ loader the plugin shows "Needs loader" and stays off.
   unpin them. Each pin slot remembers where you dropped it, across sessions. The recipe
   window's **Arrange pins** button forgets those spots and puts the pins back in their cascade.
 - **Launch planner** -- the recipe tab has a button that opens a production planner for the
-  recipe's output in your browser, added at one machine's output. The StarRupture Planner is
-  the default; set `Planner` to
-  `Custom` and give `CustomUrlTemplate` an address with `{item}` for another planner.
+  recipe's output in your browser. Choose the planner with `Planner`: the StarRupture Planner
+  (the default) adds the item at one machine's output, starruptureplanner.com and
+  starrupturecalc.com open their calculator for the item, and starrupture-planner.com opens
+  its planner page (it has no item link). Items a planner does not list open it without an
+  item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
+  address with `{item}`, `{name}` or `{game}`.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
   from the mod loader's config page or config file.
 
@@ -51,8 +54,8 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `Menu` | `PinLayout` | `Right` | Screen edge new pinned recipes cascade from: `Right`, `Left` or `Top` |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box |
-| `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner` or `Custom` |
-| `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`; `{item}` becomes the item's planner id, e.g. `https://example.com/plan?item={item}` |
+| `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` |
+| `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
 | `Menu` | `PinPositions` | empty | Where each pin slot was last dropped, as `x,y` screen fractions separated by `;`. Set by dragging a pin; clear it to reset |
 
 ---
