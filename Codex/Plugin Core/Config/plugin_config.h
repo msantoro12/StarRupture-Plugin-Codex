@@ -27,6 +27,27 @@ namespace CodexConfig
 			"Key to open (or close) the full Codex window"
 		},
 		{
+			"Menu",
+			"PinLayout",
+			ConfigValueType::String,
+			"Right",
+			"Screen edge new pinned recipes cascade from: \"Right\", \"Left\" or \"Top\""
+		},
+		{
+			"Menu",
+			"SearchBoxX",
+			ConfigValueType::Float,
+			"-1",
+			"Horizontal centre of the search box as a fraction of the screen width; -1 centres it. Drag the box to set"
+		},
+		{
+			"Menu",
+			"SearchBoxY",
+			ConfigValueType::Float,
+			"-1",
+			"Top edge of the search box as a fraction of the screen height; -1 centres it. Drag the box to set"
+		},
+		{
 			"Planner",
 			"Planner",
 			ConfigValueType::String,
@@ -84,6 +105,31 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "CodexKey", buffer, sizeof(buffer), "Shift+N"))
 				return buffer;
 			return "Shift+N";
+		}
+
+		// Returns the screen edge new pins cascade from: "Right" (default), "Left" or "Top".
+		static const char* GetPinLayout()
+		{
+			static char buffer[16];
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "PinLayout", buffer, sizeof(buffer), "Right"))
+				return buffer;
+			return "Right";
+		}
+
+		// Saved search-box position as fractions of the screen (x = centre, y = top
+		// edge); a negative value means "not placed yet, centre it".
+		static void GetSearchBoxPos(float& x, float& y)
+		{
+			x = s_self ? s_self->config->ReadFloat(s_self, "Menu", "SearchBoxX", -1.0f) : -1.0f;
+			y = s_self ? s_self->config->ReadFloat(s_self, "Menu", "SearchBoxY", -1.0f) : -1.0f;
+		}
+
+		static void SetSearchBoxPos(float x, float y)
+		{
+			if (!s_self)
+				return;
+			s_self->config->WriteFloat(s_self, "Menu", "SearchBoxX", x);
+			s_self->config->WriteFloat(s_self, "Menu", "SearchBoxY", y);
 		}
 
 		// Returns which planner the Launch planner button opens: "StarRupture Planner" (default) or "Custom".

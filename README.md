@@ -11,7 +11,9 @@ what it produces.
 ## Features
 
 - **Recipe search** -- press the configurable keybind (default `N`) to open a search box,
-  type an item, recipe or building name, and jump to its detail view. Close with `Esc`.
+  type an item, recipe or building name, then use `Up`/`Down` to pick a result and `Enter`
+  to open it (the top result is highlighted by default, and hovering a row highlights it
+  too). Close with `Esc`. The box opens centred; drag it anywhere and it opens there next time.
 - **Full Codex window** -- press `Shift+N` (configurable) to open the Codex straight to the
   last recipe you viewed, or the building browser if you haven't picked one yet.
 - **Recipe detail window** -- shows a recipe's inputs and outputs side by side, each with
@@ -21,13 +23,16 @@ what it produces.
 - **Building browser** -- the Buildings tab lists every crafting building and the recipes it
   can produce. Tiered buildings are grouped under one name (e.g. "Fabricator") with a
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
-- **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. Pinned
-  windows never block game input; open the Codex (`N`) to drag them around or unpin them.
+- **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. New pins
+  cascade from the screen edge set by `PinLayout` (right, left or top), each one a title bar
+  lower than the last. Pinned windows never block game input; open the Codex (`Shift+N`) or the mod
+  loader overlay (`F2`) to drag them around, and use the Codex to unpin them. The recipe
+  window's **Arrange pins** button puts them back in their cascade.
 - **Launch planner** -- the recipe tab has a button that opens a production planner for the
   recipe's output in your browser. The StarRupture Planner is the default; set `Planner` to
   `Custom` and give `CustomUrlTemplate` an address with `{item}` for another planner.
-- **Configurable** -- enable/disable the plugin and rebind the search key from the mod
-  loader's config file.
+- **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
+  from the mod loader's config page or config file.
 
 ## Configuration
 
@@ -38,6 +43,9 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
+| `Menu` | `PinLayout` | `Right` | Screen edge new pinned recipes cascade from: `Right`, `Left` or `Top` |
+| `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box |
+| `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box |
 | `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner` or `Custom` |
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`; `{item}` becomes the item's planner id, e.g. `https://example.com/plan?item={item}` |
 
