@@ -52,14 +52,14 @@ namespace CodexConfig
 			"Planner",
 			ConfigValueType::String,
 			"StarRupture Planner",
-			"Planner the Launch planner button opens: \"StarRupture Planner\" or \"Custom\""
+			"Planner the Launch planner button opens: \"StarRupture Planner\", \"starruptureplanner.com\", \"starrupturecalc.com\", \"starrupture-planner.com\" or \"Custom\""
 		},
 		{
 			"Planner",
 			"CustomUrlTemplate",
 			ConfigValueType::String,
 			"",
-			"Custom planner address; {item} becomes the item's planner id"
+			"Custom planner address; {item} becomes the StarRupture Planner's item id, {name} the item's display name and {game} the game's internal item name"
 		},
 		{
 			"Menu",
@@ -139,7 +139,8 @@ namespace CodexConfig
 			s_self->config->WriteFloat(s_self, "Menu", "SearchBoxY", y);
 		}
 
-		// Returns which planner the Launch planner button opens: "StarRupture Planner" (default) or "Custom".
+		// Returns which planner the Launch planner button opens: "StarRupture Planner" (default),
+		// "starruptureplanner.com", "starrupturecalc.com", "starrupture-planner.com" or "Custom".
 		static const char* GetPlanner()
 		{
 			static char buffer[64];
@@ -148,7 +149,8 @@ namespace CodexConfig
 			return "StarRupture Planner";
 		}
 
-		// Returns the custom planner URL template; {item} stands for the item's planner id.
+		// Returns the custom planner URL template; {item} stands for the StarRupture Planner's item id,
+		// {name} for the display name and {game} for the game's UniqueItemName.
 		static const char* GetPlannerUrlTemplate()
 		{
 			static char buffer[512];

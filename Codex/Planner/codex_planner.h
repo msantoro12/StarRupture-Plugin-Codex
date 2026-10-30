@@ -7,13 +7,16 @@
 //
 // The planner is chosen in the plugin config (Planner/Planner): the default is
 // the StarRupture Planner (https://starrupture.goodstuff.software), which
-// adds an item from ?add=<item id>; "Custom" uses
-// Planner/CustomUrlTemplate with {item} replaced by the planner's item id,
-// URL-encoded.
+// adds an item from ?add=<item id>. starruptureplanner.com and
+// starrupturecalc.com open their calculator for the item;
+// starrupture-planner.com has no item link and opens its planner page.
+// "Custom" uses Planner/CustomUrlTemplate with {item} replaced by the
+// StarRupture Planner's item id, {name} by the display name and {game} by the
+// game's UniqueItemName, each URL-encoded.
 //
-// Planners use their own lowercase item slugs ("basicfuel", "ore_calcium"),
-// not the game's UniqueItemName, so the item is translated through a table
-// built from the StarRupture Planner's item catalog.
+// Planners use their own item ids ("basicfuel", "ore_calcium"), not the
+// game's UniqueItemName, so the item is translated through a table built from
+// each planner's item list.
 namespace CodexPlanner
 {
 	// Opens the configured planner for the item. If the item has no planner id
