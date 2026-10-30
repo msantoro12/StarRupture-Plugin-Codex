@@ -59,11 +59,6 @@ namespace CodexUI
 		// by the Up/Down keys and by the mouse.
 		int g_searchHighlight = 0;
 
-		// Whether Up / Down were down on the previous frame, so a press is
-		// counted once.
-		bool g_searchUpHeld = false;
-		bool g_searchDownHeld = false;
-
 		// Last mouse position the search box saw, so a resting cursor doesn't
 		// fight the keyboard for the highlight.
 		float g_searchMouseX = 0.0f;
@@ -205,8 +200,6 @@ namespace CodexUI
 			g_searchBuffer[0] = '\0';
 			g_justOpenedSearch = true;
 			g_searchHighlight = 0;
-			g_searchUpHeld = false;
-			g_searchDownHeld = false;
 			g_searchPlaceFrames = 1;
 			g_searchPlaced = false;
 			PlaceSearchBox(1.0f);
@@ -665,24 +658,15 @@ namespace CodexUI
 				: g_displayH * 0.5f - kSearchBoxCollapsedHeight * fontScale * 0.5f;
 		}
 
-		// Down presses minus Up presses since the last frame. Polled rather
-		// than registered as keybinds: the modloader withholds keybinds while
-		// an ImGui text field has focus, which the search field does for as
-		// long as the player is typing.
-		int PollSearchArrowSteps()
+		// Down presses minus Up presses this frame, repeating while a key is
+		// held. Read through ImGui rather than registered as keybinds: the
+		// modloader withholds keybinds while an ImGui text field has focus,
+		// which the search field does for as long as the player is typing.
+		int SearchArrowSteps(IModLoaderImGui* imgui)
 		{
-			HWND foreground = GetForegroundWindow();
-			DWORD foregroundProcess = 0;
-			if (foreground)
-				GetWindowThreadProcessId(foreground, &foregroundProcess);
-			const bool gameFocused = foregroundProcess == GetCurrentProcessId();
-
-			const bool upHeld = gameFocused && (GetAsyncKeyState(VK_UP) & 0x8000) != 0;
-			const bool downHeld = gameFocused && (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0;
-			const int steps = (downHeld && !g_searchDownHeld ? 1 : 0) - (upHeld && !g_searchUpHeld ? 1 : 0);
-			g_searchUpHeld = upHeld;
-			g_searchDownHeld = downHeld;
-			return steps;
+			if (!imgui->IsWindowFocused(0))
+				return 0;
+			return (imgui->IsKeyPressed(VK_DOWN, true) ? 1 : 0) - (imgui->IsKeyPressed(VK_UP, true) ? 1 : 0);
 		}
 
 		// Called straight after a result row's Selectable: a moving mouse
@@ -772,7 +756,7 @@ namespace CodexUI
 			g_searchMouseX = mouseX;
 			g_searchMouseY = mouseY;
 
-			const int arrowSteps = PollSearchArrowSteps();
+			const int arrowSteps = SearchArrowSteps(imgui);
 
 			// Nothing typed yet - just the search box, nothing else.
 			const std::string term = ToLower(g_searchBuffer);
@@ -1175,11 +1159,12 @@ namespace CodexUI
 		//
 		// Each pin is its own always-visible widget window. Widgets never
 		// acquire input capture on their own, and the modloader only feeds
-		// ImGui the mouse while something holds capture - so with only pins
-		// on screen, the game keeps every mouse/keyboard input. Whenever a
-		// window that does hold capture is up (the Codex search/detail, the
-		// modloader's F2 overlay) the pins can be dragged; the Open/Unpin
-		// buttons only show while the Codex itself is open.
+		// ImGui the mouse while something holds capture or the Escape menu is
+		// open - so with only pins on screen, the game keeps every mouse/
+		// keyboard input. Whenever one of those is up (the Codex search/
+		// detail, the modloader's F2 overlay, the Escape menu) the pins can
+		// be dragged; the Open/Unpin buttons only show while the Codex itself
+		// is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
 		// slots each gets its own template-instantiated callback.
@@ -1193,9 +1178,69 @@ namespace CodexUI
 			PluginWidgetDesc  desc{};
 			PluginWindowHints hints{};
 			char              title[192] = "";
+			bool              dragging = false;
+			float             dragFromX = 0.0f;
+			float             dragFromY = 0.0f;
 		};
 
 		PinSlot g_pins[kMaxPins];
+
+		// Where the player last dropped each slot, as fractions of the screen
+		// (top-left corner) so it survives a resolution change. Kept per slot
+		// because pinned recipes themselves are not saved. Written to the
+		// config when a drag ends, never per frame.
+		struct SavedPinPos
+		{
+			float x = 0.0f;
+			float y = 0.0f;
+			bool  set = false;
+		};
+
+		SavedPinPos g_savedPins[kMaxPins];
+
+		// One "0.1234,0.5678;" entry per slot, with room to spare.
+		constexpr int kPinPositionsBufferSize = 16 * kMaxPins;
+
+		// A drop that moves the window less than this is a click, not a drag.
+		constexpr float kPinDragThreshold = 0.5f;
+
+		void LoadPinPositions()
+		{
+			char text[kPinPositionsBufferSize];
+			CodexConfig::Config::GetPinPositions(text, sizeof(text));
+
+			const char* entry = text;
+			for (SavedPinPos& saved : g_savedPins)
+			{
+				saved = SavedPinPos{};
+				if (sscanf_s(entry, "%f,%f", &saved.x, &saved.y) == 2)
+					saved.set = saved.x >= 0.0f && saved.x <= 1.0f && saved.y >= 0.0f && saved.y <= 1.0f;
+
+				entry = strchr(entry, ';');
+				if (!entry)
+					break;
+				++entry;
+			}
+		}
+
+		void SavePinPositions()
+		{
+			char text[kPinPositionsBufferSize] = "";
+			size_t length = 0;
+			for (int i = 0; i < kMaxPins; ++i)
+			{
+				const SavedPinPos& saved = g_savedPins[i];
+				if (saved.set)
+					length += snprintf(text + length, sizeof(text) - length, "%.4f,%.4f", saved.x, saved.y);
+				if (i + 1 < kMaxPins)
+					length += snprintf(text + length, sizeof(text) - length, ";");
+			}
+
+			// Slots after the last moved one carry no entry.
+			while (length > 0 && text[length - 1] == ';')
+				text[--length] = '\0';
+			CodexConfig::Config::SetPinPositions(text);
+		}
 
 		bool CodexUIActive(IModLoaderImGui* imgui)
 		{
@@ -1232,16 +1277,29 @@ namespace CodexUI
 			return false;
 		}
 
-		// Puts a pin in its slot's place along the configured screen edge:
-		// Right and Left start in that corner, Top at the top centre, and each
-		// slot sits one title bar plus item gap (the frame height with
-		// spacing) further down and in, so every pin's title stays readable.
-		// The cascade starts over before it would pass the middle of the
-		// screen. Only requests the position - the slot's render applies it
-		// once, after which the player's drag sticks.
+		// Puts a pin where the player last dropped its slot, or else in the
+		// slot's place along the configured screen edge: Right and Left start
+		// in that corner, Top at the top centre, and each slot sits one title
+		// bar plus item gap (the frame height with spacing) further down and
+		// in, so every pin's title stays readable. The cascade starts over
+		// before it would pass the middle of the screen. Only requests the
+		// position - the slot's render applies it once, after which the
+		// player's drag sticks.
 		void PlacePin(IModLoaderImGui* imgui, PinSlot& slot, int index)
 		{
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
+
+			slot.hints.pivot_y = 0.0f;
+			slot.hints.pos_cond = 0;
+
+			const SavedPinPos& saved = g_savedPins[index];
+			if (saved.set)
+			{
+				slot.hints.pivot_x = 0.0f;
+				slot.hints.pos_x   = saved.x * g_displayW;
+				slot.hints.pos_y   = saved.y * g_displayH;
+				return;
+			}
 
 			const float step = imgui->GetFrameHeightWithSpacing();
 			const int perCascade = (std::max)(1, static_cast<int>((std::min)(g_displayW, g_displayH) * 0.5f / step));
@@ -1263,13 +1321,17 @@ namespace CodexUI
 				slot.hints.pivot_x = 1.0f;
 				slot.hints.pos_x   = g_displayW - step - offset;
 			}
-			slot.hints.pivot_y = 0.0f;
-			slot.hints.pos_y   = step + offset;
-			slot.hints.pos_cond = 0;
+			slot.hints.pos_y = step + offset;
 		}
 
+		// Forgets every dragged position and lays the pinned recipes out along
+		// the configured edge again.
 		void ArrangePins(IModLoaderImGui* imgui)
 		{
+			for (SavedPinPos& saved : g_savedPins)
+				saved = SavedPinPos{};
+			SavePinPositions();
+
 			for (int i = 0; i < kMaxPins; ++i)
 			{
 				if (g_pins[i].nativeRecipe)
@@ -1307,8 +1369,34 @@ namespace CodexUI
 		{
 			PinSlot& slot = g_pins[index];
 			slot.nativeRecipe = nullptr;
+			slot.dragging = false;
 			if (g_self && g_self->hooks->UI && slot.widget)
 				g_self->hooks->UI->SetWidgetVisible(slot.widget, false);
+		}
+
+		// Saves the slot's position once, when a drag that moved its window
+		// ends.
+		void SavePinIfDragged(IModLoaderImGui* imgui, PinSlot& slot, int index)
+		{
+			float posX = 0.0f, posY = 0.0f;
+			imgui->GetWindowPos(&posX, &posY);
+
+			if (imgui->IsMouseClicked(0, false) && imgui->IsWindowHovered(0))
+			{
+				slot.dragging = true;
+				slot.dragFromX = posX;
+				slot.dragFromY = posY;
+			}
+			else if (slot.dragging && imgui->IsMouseReleased(0))
+			{
+				slot.dragging = false;
+				if (std::fabs(posX - slot.dragFromX) > kPinDragThreshold || std::fabs(posY - slot.dragFromY) > kPinDragThreshold)
+				{
+					imgui->GetDisplaySize(&g_displayW, &g_displayH);
+					g_savedPins[index] = { posX / g_displayW, posY / g_displayH, true };
+					SavePinPositions();
+				}
+			}
 		}
 
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
@@ -1318,6 +1406,8 @@ namespace CodexUI
 			// The initial placement has now been applied - stop forcing it.
 			slot.hints.pos_x = -1.0f;
 			slot.hints.pos_y = -1.0f;
+
+			SavePinIfDragged(imgui, slot, index);
 
 			const bool interactive = CodexUIActive(imgui);
 
@@ -1493,6 +1583,7 @@ namespace CodexUI
 		if (g_closerWidget)
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
+		LoadPinPositions();
 		RegisterPinSlots(self);
 
 		if (self->hooks->Input)

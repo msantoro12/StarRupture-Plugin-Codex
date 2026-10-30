@@ -46,6 +46,13 @@ namespace CodexConfig
 			ConfigValueType::Float,
 			"-1",
 			"Top edge of the search box as a fraction of the screen height; -1 centres it. Drag the box to set"
+		},
+		{
+			"Menu",
+			"PinPositions",
+			ConfigValueType::String,
+			"",
+			"Where each pinned recipe slot was last dragged, as screen-fraction \"x,y\" pairs separated by \";\" (empty = not moved). Clear to reset"
 		}
 	};
 
@@ -116,6 +123,20 @@ namespace CodexConfig
 				return;
 			s_self->config->WriteFloat(s_self, "Menu", "SearchBoxX", x);
 			s_self->config->WriteFloat(s_self, "Menu", "SearchBoxY", y);
+		}
+
+		// Saved pin positions: "x,y" screen fractions of each slot's top-left
+		// corner, separated by ";". An empty entry means the slot was never moved.
+		static void GetPinPositions(char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinPositions", out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinPositions(const char* positions)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinPositions", positions);
 		}
 
 	private:
