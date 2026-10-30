@@ -1393,7 +1393,8 @@ namespace CodexUI
 				if (std::fabs(posX - slot.dragFromX) > kPinDragThreshold || std::fabs(posY - slot.dragFromY) > kPinDragThreshold)
 				{
 					imgui->GetDisplaySize(&g_displayW, &g_displayH);
-					g_savedPins[index] = { posX / g_displayW, posY / g_displayH, true };
+					// Clamped so a pin dropped partly off the screen is still restored.
+					g_savedPins[index] = { std::clamp(posX / g_displayW, 0.0f, 1.0f), std::clamp(posY / g_displayH, 0.0f, 1.0f), true };
 					SavePinPositions();
 				}
 			}
