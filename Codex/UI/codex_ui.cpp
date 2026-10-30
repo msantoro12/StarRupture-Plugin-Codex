@@ -8,11 +8,13 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,11 +55,34 @@ namespace CodexUI
 		// tell whether the Codex UI (and so the mouse) is currently up.
 		int   g_detailLastFrame = -1000;
 
-		// Top-most row currently shown by RenderSearchWidget, refreshed every
-		// frame it renders - lets Enter jump straight to it without re-running
-		// the search match logic. A recipe wins over a building.
-		void*       g_topSearchResult = nullptr;
-		std::string g_topSearchBuilding;
+		// Row of the search dropdown that Enter opens, counting recipes first,
+		// then buildings. Reset to the top result by every new search; moved
+		// by the Up/Down keys and by the mouse.
+		int g_searchHighlight = 0;
+
+		// Up/Down presses since the last frame - written by the keybind
+		// callback, drained by RenderSearchWidget.
+		std::atomic<int> g_searchArrowSteps{ 0 };
+
+		// Last mouse position the search box saw, so a resting cursor doesn't
+		// fight the keyboard for the highlight.
+		float g_searchMouseX = 0.0f;
+		float g_searchMouseY = 0.0f;
+
+		// Search box placement. The loader re-applies a widget's position
+		// hints every frame, which would pin the box in place, so the box is
+		// placed for a frame after opening and then left to ImGui so it can
+		// be dragged. g_searchPos* is the top-left corner it was last placed
+		// or dropped at; a drop that changes it is saved to the config.
+		int   g_searchPlaceFrames = 0;
+		bool  g_searchPlaced = false;
+		float g_searchPosX = 0.0f;
+		float g_searchPosY = 0.0f;
+
+		// Last display size a Codex window rendered on - places the search
+		// box and pins on the frame they appear, before they can query it.
+		float g_displayW = 1920.0f;
+		float g_displayH = 1080.0f;
 
 		// Set when the user clicks an output item; drives the "used in..."
 		// popup listing every recipe that consumes that item as an input.
@@ -92,13 +117,17 @@ namespace CodexUI
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
 		void OnSearchKeyPressed(EModKey key, EModKeyEvent event);
+		void OnSearchArrowPressed(EModKey key, EModKeyEvent event);
 		void OnCodexKeyPressed(EModKey key, EModKeyEvent event);
 		void CloseSearch();
 		void CloseDetail();
 		void OnDetailPanelClosed(PanelHandle handle);
-		void PinRecipe(void* nativeRecipe);
+		void PlaceSearchBox(float fontScale);
+		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe);
+		void ArrangePins(IModLoaderImGui* imgui);
 		bool IsPinned(void* nativeRecipe);
 		bool HasFreePinSlot();
+		bool AnyPinned();
 
 		std::string ToLower(const std::string& s)
 		{
@@ -176,11 +205,22 @@ namespace CodexUI
 			g_searchVisible = true;
 			g_searchBuffer[0] = '\0';
 			g_justOpenedSearch = true;
+			g_searchHighlight = 0;
+			g_searchArrowSteps = 0;
+			g_searchPlaceFrames = 1;
+			g_searchPlaced = false;
+			PlaceSearchBox(1.0f);
 			g_searchHint = std::string("Search recipes and buildings (") +
 				CodexConfig::Config::GetCodexKey() + " opens full Codex)";
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, true);
+
+			if (g_self && g_self->hooks->Input)
+			{
+				g_self->hooks->Input->RegisterKeybind(EModKey::Up, EModKeyEvent::Pressed, &OnSearchArrowPressed);
+				g_self->hooks->Input->RegisterKeybind(EModKey::Down, EModKeyEvent::Pressed, &OnSearchArrowPressed);
+			}
 
 			AcquireEscape();
 			AcquireCapture();
@@ -192,8 +232,12 @@ namespace CodexUI
 				return;
 
 			g_searchVisible = false;
-			g_topSearchResult = nullptr;
-			g_topSearchBuilding.clear();
+
+			if (g_self && g_self->hooks->Input)
+			{
+				g_self->hooks->Input->UnregisterKeybind(EModKey::Up, EModKeyEvent::Pressed, &OnSearchArrowPressed);
+				g_self->hooks->Input->UnregisterKeybind(EModKey::Down, EModKeyEvent::Pressed, &OnSearchArrowPressed);
+			}
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, false);
@@ -297,6 +341,13 @@ namespace CodexUI
 				CloseSearch();
 			else if (g_detailVisible)
 				CloseDetail();
+		}
+
+		void OnSearchArrowPressed(EModKey key, EModKeyEvent event)
+		{
+			if (event != EModKeyEvent::Pressed)
+				return;
+			g_searchArrowSteps.fetch_add(key == EModKey::Down ? 1 : -1);
 		}
 
 		void OnSearchKeyPressed(EModKey /*key*/, EModKeyEvent event)
@@ -617,16 +668,69 @@ namespace CodexUI
 		constexpr float kBaselineFontSize = 13.0f;
 		constexpr float kSearchBoxBaseWidth = 440.0f;
 
+		// Puts the search box where the player last dropped it, or centred
+		// (as if it were collapsed) when it has never been moved. The
+		// position is saved as screen fractions, so it survives a resolution
+		// change.
+		void PlaceSearchBox(float fontScale)
+		{
+			float x = -1.0f, y = -1.0f;
+			CodexConfig::Config::GetSearchBoxPos(x, y);
+			const bool saved = x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f;
+
+			g_searchHints.pos_x = (saved ? x : 0.5f) * g_displayW;
+			g_searchHints.pos_y = saved
+				? y * g_displayH
+				: g_displayH * 0.5f - kSearchBoxCollapsedHeight * fontScale * 0.5f;
+		}
+
+		// Called straight after a result row's Selectable: a moving mouse
+		// pulls the highlight to the row under it, and a row reached with
+		// the arrow keys is scrolled into view.
+		void SyncSearchHighlight(IModLoaderImGui* imgui, int row, bool mouseMoved, bool keyMoved)
+		{
+			if (mouseMoved && imgui->IsItemHovered())
+				g_searchHighlight = row;
+			if (keyMoved && row == g_searchHighlight)
+				imgui->SetScrollHereY(0.5f);
+		}
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
 			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
-			const float collapsedHeight = kSearchBoxCollapsedHeight * fontScale;
 			g_searchHints.width = kSearchBoxBaseWidth * fontScale;
 
-			float dispW = 1920.0f, dispH = 1080.0f;
-			imgui->GetDisplaySize(&dispW, &dispH);
-			g_searchHints.pos_x = dispW * 0.5f;
-			g_searchHints.pos_y = dispH * 0.5f - collapsedHeight * 0.5f;
+			imgui->GetDisplaySize(&g_displayW, &g_displayH);
+
+			if (g_searchPlaceFrames > 0)
+			{
+				// The opening frame used the last known display size and font
+				// scale; this one has the real ones.
+				--g_searchPlaceFrames;
+				PlaceSearchBox(fontScale);
+			}
+			else
+			{
+				g_searchHints.pos_x = -1.0f;
+				g_searchHints.pos_y = -1.0f;
+
+				float posX = 0.0f, posY = 0.0f, sizeX = 0.0f, sizeY = 0.0f;
+				imgui->GetWindowPos(&posX, &posY);
+				imgui->GetWindowSize(&sizeX, &sizeY);
+				if (!g_searchPlaced)
+				{
+					g_searchPosX = posX;
+					g_searchPosY = posY;
+					g_searchPlaced = true;
+				}
+				else if (imgui->IsMouseReleased(0) &&
+					(std::fabs(posX - g_searchPosX) > 0.5f || std::fabs(posY - g_searchPosY) > 0.5f))
+				{
+					g_searchPosX = posX;
+					g_searchPosY = posY;
+					CodexConfig::Config::SetSearchBoxPos((posX + sizeX * 0.5f) / g_displayW, posY / g_displayH);
+				}
+			}
 
 			if (g_justOpenedSearch)
 			{
@@ -635,7 +739,8 @@ namespace CodexUI
 			}
 
 			imgui->SetNextItemWidth(-1.0f);
-			imgui->InputTextWithHint("##Codex_Search_Input", g_searchHint.c_str(), g_searchBuffer, sizeof(g_searchBuffer));
+			if (imgui->InputTextWithHint("##Codex_Search_Input", g_searchHint.c_str(), g_searchBuffer, sizeof(g_searchBuffer)))
+				g_searchHighlight = 0;
 
 			// Detected directly off the InputText widget rather than a
 			// global "Enter" keybind: the modloader's hotkey system only
@@ -649,17 +754,20 @@ namespace CodexUI
 			// which happens on the mouse-press frame - one frame before the
 			// clicked result row (a Selectable, which reports on release)
 			// can return true. Left unguarded, clicking any row would close
-			// the search and jump to the top result instead. So ignore a
-			// deactivation caused by a mouse press and let the row's own
-			// click handle it.
+			// the search and jump to the highlighted result instead. So
+			// ignore a deactivation caused by a mouse press and let the
+			// row's own click handle it.
 			const bool deactivated = imgui->IsItemDeactivatedAfterEdit();
 			const bool mousePressed = imgui->IsMouseClicked(0, false) || imgui->IsMouseClicked(1, false);
 			const bool submitted = deactivated && !mousePressed;
 
-			// Refreshed below as results are matched; stale otherwise so
-			// Enter can't jump to a result that's no longer shown.
-			g_topSearchResult = nullptr;
-			g_topSearchBuilding.clear();
+			float mouseX = 0.0f, mouseY = 0.0f;
+			imgui->GetMousePos(&mouseX, &mouseY);
+			const bool mouseMoved = mouseX != g_searchMouseX || mouseY != g_searchMouseY;
+			g_searchMouseX = mouseX;
+			g_searchMouseY = mouseY;
+
+			const int arrowSteps = g_searchArrowSteps.exchange(0);
 
 			// Nothing typed yet - just the search box, nothing else.
 			const std::string term = ToLower(g_searchBuffer);
@@ -684,89 +792,104 @@ namespace CodexUI
 			std::vector<CodexRecipes::RecipeInfo> all = CodexRecipes::GetAll();
 			if (all.empty())
 				return;
+			std::vector<CodexRecipes::BuildingGroup> groups = CodexRecipes::GetBuildingGroups();
 
 			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
 
-			constexpr int kMaxResults = 10;
-			constexpr int kMaxBuildingResults = 3;
-			int shown = 0;
+			constexpr size_t kMaxResults = 10;
+			constexpr size_t kMaxBuildingResults = 3;
+
+			std::vector<const CodexRecipes::RecipeInfo*> recipes;
+			for (const CodexRecipes::RecipeInfo& recipe : all)
+			{
+				if (recipes.size() >= kMaxResults)
+					break;
+				if (ToLower(recipe.displayName).find(term) != std::string::npos)
+					recipes.push_back(&recipe);
+			}
+
+			std::vector<const CodexRecipes::BuildingGroup*> buildings;
+			for (const CodexRecipes::BuildingGroup& group : groups)
+			{
+				if (buildings.size() >= kMaxBuildingResults)
+					break;
+				if (ToLower(group.displayName).find(term) != std::string::npos)
+					buildings.push_back(&group);
+			}
+
+			const int rowCount = static_cast<int>(recipes.size() + buildings.size());
+			if (rowCount == 0)
+				return;
+
+			g_searchHighlight = std::clamp(g_searchHighlight + arrowSteps, 0, rowCount - 1);
 
 			imgui->Separator();
 
-			for (const CodexRecipes::RecipeInfo& recipe : all)
+			int row = 0;
+			for (const CodexRecipes::RecipeInfo* recipe : recipes)
 			{
-				if (shown >= kMaxResults)
-					break;
-
-				if (ToLower(recipe.displayName).find(term) == std::string::npos)
-					continue;
-
-				if (shown == 0)
-					g_topSearchResult = recipe.nativeRecipe;
-
-				PushIDPtr(imgui, recipe.nativeRecipe);
-				bool clicked = imgui->SelectableFull("##recipe_row", false, kSelectableFlags, 0.0f, 22.0f);
+				PushIDPtr(imgui, recipe->nativeRecipe);
+				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, 22.0f);
+				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
-				RenderRecipeLabel(imgui, textures, recipe, 18.0f);
+				RenderRecipeLabel(imgui, textures, *recipe, 18.0f);
 
 				// Tiered recipes share a name - the building tells them apart.
 				imgui->SameLine(0.0f, 10.0f);
-				imgui->TextDisabled(recipe.buildingName.c_str());
+				imgui->TextDisabled(recipe->buildingName.c_str());
 				imgui->PopID();
 
 				if (clicked)
 				{
+					void* target = recipe->nativeRecipe;
 					CloseSearch();
-					OpenDetail(recipe.nativeRecipe);
+					OpenDetail(target);
 					return;
 				}
 
-				++shown;
+				++row;
 			}
 
-			int shownBuildings = 0;
-			for (const CodexRecipes::BuildingGroup& group : CodexRecipes::GetBuildingGroups())
+			if (!recipes.empty() && !buildings.empty())
+				imgui->Separator();
+
+			for (const CodexRecipes::BuildingGroup* group : buildings)
 			{
-				if (shownBuildings >= kMaxBuildingResults)
-					break;
-
-				if (ToLower(group.displayName).find(term) == std::string::npos)
-					continue;
-
-				if (shownBuildings == 0 && shown > 0)
-					imgui->Separator();
-				if (shownBuildings == 0 && !g_topSearchResult)
-					g_topSearchBuilding = group.displayName;
-
-				imgui->PushIDStr(group.displayName.c_str());
-				bool clicked = imgui->SelectableFull("##building_row", false, kSelectableFlags, 0.0f, 22.0f);
+				imgui->PushIDStr(group->displayName.c_str());
+				bool clicked = imgui->SelectableFull("##building_row", row == g_searchHighlight, kSelectableFlags, 0.0f, 22.0f);
+				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
-				imgui->Text(group.displayName.c_str());
+				imgui->Text(group->displayName.c_str());
 				imgui->SameLine(0.0f, 10.0f);
 				imgui->TextDisabled("Building");
 				imgui->PopID();
 
 				if (clicked)
 				{
+					std::string target = group->displayName;
 					CloseSearch();
-					OpenBuilding(group.displayName, 0);
+					OpenBuilding(target, 0);
 					return;
 				}
 
-				++shownBuildings;
+				++row;
 			}
 
-			if (submitted && g_topSearchResult)
+			if (submitted)
 			{
-				void* target = g_topSearchResult;
-				CloseSearch();
-				OpenDetail(target);
-			}
-			else if (submitted && !g_topSearchBuilding.empty())
-			{
-				std::string target = g_topSearchBuilding;
-				CloseSearch();
-				OpenBuilding(target, 0);
+				const size_t highlighted = static_cast<size_t>(g_searchHighlight);
+				if (highlighted < recipes.size())
+				{
+					void* target = recipes[highlighted]->nativeRecipe;
+					CloseSearch();
+					OpenDetail(target);
+				}
+				else
+				{
+					std::string target = buildings[highlighted - recipes.size()]->displayName;
+					CloseSearch();
+					OpenBuilding(target, 0);
+				}
 			}
 		}
 
@@ -783,7 +906,7 @@ namespace CodexUI
 			const bool canPin = !pinned && HasFreePinSlot();
 			imgui->BeginDisabled(!canPin);
 			if (imgui->SmallButton(pinned ? "Pinned" : "Pin"))
-				PinRecipe(info.nativeRecipe);
+				PinRecipe(imgui, info.nativeRecipe);
 			imgui->EndDisabled();
 			if (!pinned && !canPin)
 				imgui->SetItemTooltip("All pin slots are in use - unpin a recipe first.");
@@ -913,7 +1036,7 @@ namespace CodexUI
 				imgui->PopID();
 
 				if (rightClicked && !IsPinned(nativeRecipe))
-					PinRecipe(nativeRecipe);
+					PinRecipe(imgui, nativeRecipe);
 				else if (clicked)
 					OpenDetail(nativeRecipe);
 			}
@@ -1009,17 +1132,17 @@ namespace CodexUI
 			}
 			g_detailLastFrame = imgui->GetFrameCount();
 
-			if (imgui->Button("Close"))
-			{
-				CloseDetail();
-				return;
-			}
-
 			// Opens the search box over this window; picking a result then
 			// navigates here instead of opening a new window.
-			imgui->SameLine(0.0f, 6.0f);
 			if (imgui->Button("Search"))
 				OpenSearch();
+
+			if (AnyPinned())
+			{
+				imgui->SameLine(0.0f, 6.0f);
+				if (imgui->Button("Arrange pins"))
+					ArrangePins(imgui);
+			}
 
 			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
 
@@ -1048,9 +1171,10 @@ namespace CodexUI
 		// Each pin is its own always-visible widget window. Widgets never
 		// acquire input capture on their own, and the modloader only feeds
 		// ImGui the mouse while something holds capture - so with only pins
-		// on screen, the game keeps every mouse/keyboard input. While the
-		// Codex search/detail is open (which does hold capture) the pins
-		// become interactive: drag to move, Unpin to close.
+		// on screen, the game keeps every mouse/keyboard input. Whenever a
+		// window that does hold capture is up (the Codex search/detail, the
+		// modloader's F2 overlay) the pins can be dragged; the Open/Unpin
+		// buttons only show while the Codex itself is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
 		// slots each gets its own template-instantiated callback.
@@ -1067,7 +1191,6 @@ namespace CodexUI
 		};
 
 		PinSlot g_pins[kMaxPins];
-		float   g_lastDisplayW = 1920.0f;
 
 		bool CodexUIActive(IModLoaderImGui* imgui)
 		{
@@ -1094,7 +1217,62 @@ namespace CodexUI
 			return false;
 		}
 
-		void PinRecipe(void* nativeRecipe)
+		bool AnyPinned()
+		{
+			for (const PinSlot& slot : g_pins)
+			{
+				if (slot.nativeRecipe)
+					return true;
+			}
+			return false;
+		}
+
+		// Puts a pin in its slot's place along the configured screen edge:
+		// Right and Left start in that corner, Top at the top centre, and each
+		// slot sits one title bar plus item gap (the frame height with
+		// spacing) further down and in, so every pin's title stays readable.
+		// The cascade starts over before it would pass the middle of the
+		// screen. Only requests the position - the slot's render applies it
+		// once, after which the player's drag sticks.
+		void PlacePin(IModLoaderImGui* imgui, PinSlot& slot, int index)
+		{
+			imgui->GetDisplaySize(&g_displayW, &g_displayH);
+
+			const float step = imgui->GetFrameHeightWithSpacing();
+			const int perCascade = (std::max)(1, static_cast<int>((std::min)(g_displayW, g_displayH) * 0.5f / step));
+			const float offset = step * static_cast<float>(index % perCascade);
+
+			const char* layout = CodexConfig::Config::GetPinLayout();
+			if (_stricmp(layout, "Left") == 0)
+			{
+				slot.hints.pivot_x = 0.0f;
+				slot.hints.pos_x   = step + offset;
+			}
+			else if (_stricmp(layout, "Top") == 0)
+			{
+				slot.hints.pivot_x = 0.5f;
+				slot.hints.pos_x   = g_displayW * 0.5f + offset;
+			}
+			else
+			{
+				slot.hints.pivot_x = 1.0f;
+				slot.hints.pos_x   = g_displayW - step - offset;
+			}
+			slot.hints.pivot_y = 0.0f;
+			slot.hints.pos_y   = step + offset;
+			slot.hints.pos_cond = 0;
+		}
+
+		void ArrangePins(IModLoaderImGui* imgui)
+		{
+			for (int i = 0; i < kMaxPins; ++i)
+			{
+				if (g_pins[i].nativeRecipe)
+					PlacePin(imgui, g_pins[i], i);
+			}
+		}
+
+		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe)
 		{
 			if (!nativeRecipe || IsPinned(nativeRecipe))
 				return;
@@ -1112,14 +1290,7 @@ namespace CodexUI
 				slot.nativeRecipe = nativeRecipe;
 				snprintf(slot.title, sizeof(slot.title), "%s###CodexPin%d", info.displayName.c_str(), i);
 
-				// Cascade new pins down the right-hand edge of the screen;
-				// placed once (cond Always for a single frame), after which
-				// the slot's render clears pos_x so the user's drag sticks.
-				slot.hints.pos_x   = g_lastDisplayW - 24.0f;
-				slot.hints.pos_y   = 140.0f + 36.0f * static_cast<float>(i);
-				slot.hints.pivot_x = 1.0f;
-				slot.hints.pivot_y = 0.0f;
-				slot.hints.pos_cond = 0;
+				PlacePin(imgui, slot, i);
 
 				if (g_self && g_self->hooks->UI)
 					g_self->hooks->UI->SetWidgetVisible(slot.widget, true);
@@ -1139,21 +1310,11 @@ namespace CodexUI
 		{
 			PinSlot& slot = g_pins[index];
 
-			float dispW = 0.0f, dispH = 0.0f;
-			imgui->GetDisplaySize(&dispW, &dispH);
-			if (dispW > 0.0f)
-				g_lastDisplayW = dispW;
-
 			// The initial placement has now been applied - stop forcing it.
 			slot.hints.pos_x = -1.0f;
 			slot.hints.pos_y = -1.0f;
 
-			// Applied next frame. NoMouseInputs while the Codex is closed is
-			// belt-and-braces: ImGui isn't fed the mouse then anyway, but a
-			// stale cursor position must never make a pin eat a click.
 			const bool interactive = CodexUIActive(imgui);
-			slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
-				(interactive ? 0 : PluginWindowFlags_NoMouseInputs);
 
 			CodexRecipes::RecipeInfo info;
 			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
@@ -1242,8 +1403,7 @@ namespace CodexUI
 				slot.hints.pos_y  = -1.0f;
 				slot.hints.size_cond = 0;
 				slot.hints.pos_cond  = 0;
-				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
-					PluginWindowFlags_NoMouseInputs;
+				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings;
 
 				slot.desc.name        = slot.title;
 				slot.desc.renderFn    = kPinRenderFns[i];
@@ -1281,14 +1441,14 @@ namespace CodexUI
 
 		g_searchHints.width  = 440.0f;
 		g_searchHints.height = 0.0f;
-		g_searchHints.pos_x  = 960.0f;
-		g_searchHints.pos_y  = 540.0f - kSearchBoxCollapsedHeight * 0.5f;
+		g_searchHints.pos_x  = -1.0f; // placed by PlaceSearchBox each time it opens
+		g_searchHints.pos_y  = -1.0f;
 		g_searchHints.pivot_x = 0.5f;
 		g_searchHints.pivot_y = 0.0f; // Top-anchored so growth expands downward, not from center
 		g_searchHints.size_cond = 0; // Always
-		g_searchHints.pos_cond  = 0; // Always - recentres every frame via GetDisplaySize
+		g_searchHints.pos_cond  = 0; // Always - for the frames it is placed on
 		g_searchHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
-			PluginWindowFlags_NoMove | PluginWindowFlags_NoSavedSettings;
+			PluginWindowFlags_NoSavedSettings;
 
 		g_searchDesc.name        = "Codex Search";
 		g_searchDesc.renderFn    = &RenderSearchWidget;
