@@ -1160,11 +1160,11 @@ namespace CodexUI
 		// Each pin is its own always-visible widget window. Widgets never
 		// acquire input capture on their own, and the modloader only feeds
 		// ImGui the mouse while something holds capture or the Escape menu is
-		// open - so with only pins on screen, the game keeps every mouse/
-		// keyboard input. Whenever one of those is up (the Codex search/
-		// detail, the modloader's F2 overlay, the Escape menu) the pins can
-		// be dragged; the Open/Unpin buttons only show while the Codex itself
-		// is open.
+		// open (there only to windows that opt in, as the pins do) - so with
+		// only pins on screen, the game keeps every mouse/keyboard input.
+		// Whenever one of those is up (the Codex search/detail, the
+		// modloader's F2 overlay, the Escape menu) the pins can be dragged;
+		// the Open/Unpin buttons only show while the Codex itself is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
 		// slots each gets its own template-instantiated callback.
@@ -1499,7 +1499,8 @@ namespace CodexUI
 				slot.hints.pos_y  = -1.0f;
 				slot.hints.size_cond = 0;
 				slot.hints.pos_cond  = 0;
-				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings;
+				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+					PluginWindowFlags_PauseMenuMouseInputs;
 
 				slot.desc.name        = slot.title;
 				slot.desc.renderFn    = kPinRenderFns[i];
@@ -1544,7 +1545,7 @@ namespace CodexUI
 		g_searchHints.size_cond = 0; // Always
 		g_searchHints.pos_cond  = 0; // Always - for the frames it is placed on
 		g_searchHints.extra_window_flags = PluginWindowFlags_NoTitleBar | PluginWindowFlags_NoResize |
-			PluginWindowFlags_NoSavedSettings;
+			PluginWindowFlags_NoSavedSettings | PluginWindowFlags_PauseMenuMouseInputs;
 
 		g_searchDesc.name        = "Codex Search";
 		g_searchDesc.renderFn    = &RenderSearchWidget;
