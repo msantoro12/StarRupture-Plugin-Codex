@@ -7,7 +7,7 @@
 //
 // The planner is chosen in the plugin config (Planner/Planner): the default is
 // the StarRupture Planner (https://starrupture.goodstuff.software), which
-// takes its target item as ?p=base64url({"i":"<id>","r":60}); "Custom" uses
+// adds an item from ?add=<item id>; "Custom" uses
 // Planner/CustomUrlTemplate with {item} replaced by the planner's item id,
 // URL-encoded.
 //
