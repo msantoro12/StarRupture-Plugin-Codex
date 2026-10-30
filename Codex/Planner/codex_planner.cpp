@@ -15,7 +15,6 @@ namespace CodexPlanner
 		constexpr const char* kDefaultPlannerBaseUrl = "https://starrupture.goodstuff.software/";
 		constexpr const char* kDefaultPlannerName = "StarRupture Planner";
 		constexpr const char* kItemPlaceholder = "{item}";
-		constexpr int         kTargetRatePerMinute = 60;
 		constexpr size_t      kMaxUrlLength = 2048;
 
 		// The StarRupture Planner's item catalog (update2_QoL,
@@ -192,37 +191,6 @@ namespace CodexPlanner
 			return std::string();
 		}
 
-		// Unpadded base64url, as the planner's toBase64Url writes it.
-		std::string Base64Url(const std::string& in)
-		{
-			static constexpr char kAlphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-			std::string out;
-			size_t i = 0;
-			for (; i + 2 < in.size(); i += 3)
-			{
-				const unsigned v = (static_cast<unsigned char>(in[i]) << 16) |
-					(static_cast<unsigned char>(in[i + 1]) << 8) | static_cast<unsigned char>(in[i + 2]);
-				out += kAlphabet[(v >> 18) & 63];
-				out += kAlphabet[(v >> 12) & 63];
-				out += kAlphabet[(v >> 6) & 63];
-				out += kAlphabet[v & 63];
-			}
-			if (i + 1 == in.size())
-			{
-				const unsigned v = static_cast<unsigned char>(in[i]) << 16;
-				out += kAlphabet[(v >> 18) & 63];
-				out += kAlphabet[(v >> 12) & 63];
-			}
-			else if (i + 2 == in.size())
-			{
-				const unsigned v = (static_cast<unsigned char>(in[i]) << 16) | (static_cast<unsigned char>(in[i + 1]) << 8);
-				out += kAlphabet[(v >> 18) & 63];
-				out += kAlphabet[(v >> 12) & 63];
-				out += kAlphabet[(v >> 6) & 63];
-			}
-			return out;
-		}
-
 		// Percent-encodes everything outside the RFC 3986 unreserved set.
 		std::string UrlEncode(const std::string& s)
 		{
@@ -282,7 +250,7 @@ namespace CodexPlanner
 
 			std::string url = kDefaultPlannerBaseUrl;
 			if (!plannerId.empty())
-				url += "?p=" + Base64Url("{\"i\":\"" + plannerId + "\",\"r\":" + std::to_string(kTargetRatePerMinute) + "}");
+				url += "?add=" + UrlEncode(plannerId);
 			return url;
 		}
 	}

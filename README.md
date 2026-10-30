@@ -33,7 +33,8 @@ loader the plugin shows "Needs loader" and stays off.
   unpin them. Each pin slot remembers where you dropped it, across sessions. The recipe
   window's **Arrange pins** button forgets those spots and puts the pins back in their cascade.
 - **Launch planner** -- the recipe tab has a button that opens a production planner for the
-  recipe's output in your browser. The StarRupture Planner is the default; set `Planner` to
+  recipe's output in your browser, added at one machine's output. The StarRupture Planner is
+  the default; set `Planner` to
   `Custom` and give `CustomUrlTemplate` an address with `{item}` for another planner.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
   from the mod loader's config page or config file.
