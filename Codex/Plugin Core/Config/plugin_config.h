@@ -60,6 +60,13 @@ namespace CodexConfig
 			ConfigValueType::String,
 			"",
 			"Custom planner address; {item} becomes the item's planner id"
+		},
+		{
+			"Menu",
+			"PinPositions",
+			ConfigValueType::String,
+			"",
+			"Where each pinned recipe slot was last dragged, as screen-fraction \"x,y\" pairs separated by \";\" (empty = not moved). Clear to reset"
 		}
 	};
 
@@ -148,6 +155,20 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Planner", "CustomUrlTemplate", buffer, sizeof(buffer) - 1, ""))
 				return buffer;
 			return "";
+		}
+
+		// Saved pin positions: "x,y" screen fractions of each slot's top-left
+		// corner, separated by ";". An empty entry means the slot was never moved.
+		static void GetPinPositions(char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinPositions", out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinPositions(const char* positions)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinPositions", positions);
 		}
 
 	private:

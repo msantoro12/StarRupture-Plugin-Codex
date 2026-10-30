@@ -1,6 +1,8 @@
-Search box: Up/Down pick a result, Enter opens it, the top result is the default
+Search box: Up/Down (hold to repeat) pick a result, Enter opens it, the top result is the default
 Search box opens centred and can be dragged; it reopens where you left it
 New option PinLayout: new pinned recipes cascade from the right, left or top edge, one title bar apart
-Pinned recipes can be dragged while the Codex or the mod loader overlay (F2) is open
-Arrange pins button on the recipe window puts the pins back in their cascade
+Pinned recipes can be dragged while the Codex, the mod loader overlay (F2) or the Escape menu is open
+Where a pin is dropped is remembered for its slot and kept between sessions (new option PinPositions)
+Arrange pins button on the recipe window forgets those spots and puts the pins back in their cascade
+Needs a mod loader with plugin interface v71; on an older loader Codex shows "Needs loader" and stays off
 The recipe window's redundant Close button is gone (use the X or Esc)
