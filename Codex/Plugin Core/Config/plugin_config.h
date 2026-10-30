@@ -31,7 +31,7 @@ namespace CodexConfig
 			"PinLayout",
 			ConfigValueType::String,
 			"Right",
-			"Screen edge new pinned recipes line up along: \"Right\", \"Left\" or \"Top\""
+			"Screen edge new pinned recipes cascade from: \"Right\", \"Left\" or \"Top\""
 		},
 		{
 			"Menu",
@@ -93,7 +93,7 @@ namespace CodexConfig
 			return "Shift+N";
 		}
 
-		// Returns the screen edge new pins line up along: "Right" (default), "Left" or "Top".
+		// Returns the screen edge new pins cascade from: "Right" (default), "Left" or "Top".
 		static const char* GetPinLayout()
 		{
 			static char buffer[16];

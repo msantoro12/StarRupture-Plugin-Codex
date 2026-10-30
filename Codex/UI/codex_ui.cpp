@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -60,9 +59,10 @@ namespace CodexUI
 		// by the Up/Down keys and by the mouse.
 		int g_searchHighlight = 0;
 
-		// Up/Down presses since the last frame - written by the keybind
-		// callback, drained by RenderSearchWidget.
-		std::atomic<int> g_searchArrowSteps{ 0 };
+		// Whether Up / Down were down on the previous frame, so a press is
+		// counted once.
+		bool g_searchUpHeld = false;
+		bool g_searchDownHeld = false;
 
 		// Last mouse position the search box saw, so a resting cursor doesn't
 		// fight the keyboard for the highlight.
@@ -117,7 +117,6 @@ namespace CodexUI
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
 		void OnSearchKeyPressed(EModKey key, EModKeyEvent event);
-		void OnSearchArrowPressed(EModKey key, EModKeyEvent event);
 		void OnCodexKeyPressed(EModKey key, EModKeyEvent event);
 		void CloseSearch();
 		void CloseDetail();
@@ -206,7 +205,8 @@ namespace CodexUI
 			g_searchBuffer[0] = '\0';
 			g_justOpenedSearch = true;
 			g_searchHighlight = 0;
-			g_searchArrowSteps = 0;
+			g_searchUpHeld = false;
+			g_searchDownHeld = false;
 			g_searchPlaceFrames = 1;
 			g_searchPlaced = false;
 			PlaceSearchBox(1.0f);
@@ -215,12 +215,6 @@ namespace CodexUI
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, true);
-
-			if (g_self && g_self->hooks->Input)
-			{
-				g_self->hooks->Input->RegisterKeybind(EModKey::Up, EModKeyEvent::Pressed, &OnSearchArrowPressed);
-				g_self->hooks->Input->RegisterKeybind(EModKey::Down, EModKeyEvent::Pressed, &OnSearchArrowPressed);
-			}
 
 			AcquireEscape();
 			AcquireCapture();
@@ -232,12 +226,6 @@ namespace CodexUI
 				return;
 
 			g_searchVisible = false;
-
-			if (g_self && g_self->hooks->Input)
-			{
-				g_self->hooks->Input->UnregisterKeybind(EModKey::Up, EModKeyEvent::Pressed, &OnSearchArrowPressed);
-				g_self->hooks->Input->UnregisterKeybind(EModKey::Down, EModKeyEvent::Pressed, &OnSearchArrowPressed);
-			}
 
 			if (g_self && g_self->hooks->UI && g_searchWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_searchWidget, false);
@@ -341,13 +329,6 @@ namespace CodexUI
 				CloseSearch();
 			else if (g_detailVisible)
 				CloseDetail();
-		}
-
-		void OnSearchArrowPressed(EModKey key, EModKeyEvent event)
-		{
-			if (event != EModKeyEvent::Pressed)
-				return;
-			g_searchArrowSteps.fetch_add(key == EModKey::Down ? 1 : -1);
 		}
 
 		void OnSearchKeyPressed(EModKey /*key*/, EModKeyEvent event)
@@ -684,6 +665,26 @@ namespace CodexUI
 				: g_displayH * 0.5f - kSearchBoxCollapsedHeight * fontScale * 0.5f;
 		}
 
+		// Down presses minus Up presses since the last frame. Polled rather
+		// than registered as keybinds: the modloader withholds keybinds while
+		// an ImGui text field has focus, which the search field does for as
+		// long as the player is typing.
+		int PollSearchArrowSteps()
+		{
+			HWND foreground = GetForegroundWindow();
+			DWORD foregroundProcess = 0;
+			if (foreground)
+				GetWindowThreadProcessId(foreground, &foregroundProcess);
+			const bool gameFocused = foregroundProcess == GetCurrentProcessId();
+
+			const bool upHeld = gameFocused && (GetAsyncKeyState(VK_UP) & 0x8000) != 0;
+			const bool downHeld = gameFocused && (GetAsyncKeyState(VK_DOWN) & 0x8000) != 0;
+			const int steps = (downHeld && !g_searchDownHeld ? 1 : 0) - (upHeld && !g_searchUpHeld ? 1 : 0);
+			g_searchUpHeld = upHeld;
+			g_searchDownHeld = downHeld;
+			return steps;
+		}
+
 		// Called straight after a result row's Selectable: a moving mouse
 		// pulls the highlight to the row under it, and a row reached with
 		// the arrow keys is scrolled into view.
@@ -729,6 +730,10 @@ namespace CodexUI
 					g_searchPosX = posX;
 					g_searchPosY = posY;
 					CodexConfig::Config::SetSearchBoxPos((posX + sizeX * 0.5f) / g_displayW, posY / g_displayH);
+
+					// Dragging the box takes focus off the field; give it back so
+					// typing and Enter keep working.
+					g_justOpenedSearch = true;
 				}
 			}
 
@@ -767,7 +772,7 @@ namespace CodexUI
 			g_searchMouseX = mouseX;
 			g_searchMouseY = mouseY;
 
-			const int arrowSteps = g_searchArrowSteps.exchange(0);
+			const int arrowSteps = PollSearchArrowSteps();
 
 			// Nothing typed yet - just the search box, nothing else.
 			const std::string term = ToLower(g_searchBuffer);
