@@ -6,6 +6,9 @@ what it produces.
 
 **Target:** Game client only
 
+**Requires:** a mod loader with plugin interface v71 or newer (later than 1.22.0). On an older
+loader the plugin shows "Needs loader" and stays off.
+
 ---
 
 ## Features
@@ -25,9 +28,10 @@ what it produces.
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
 - **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. New pins
   cascade from the screen edge set by `PinLayout` (right, left or top), each one a title bar
-  lower than the last. Pinned windows never block game input; open the Codex (`Shift+N`) or the mod
-  loader overlay (`F2`) to drag them around, and use the Codex to unpin them. The recipe
-  window's **Arrange pins** button puts them back in their cascade.
+  lower than the last. Pinned windows never block game input; drag them while the Codex
+  (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, and use the Codex to
+  unpin them. Each pin slot remembers where you dropped it, across sessions. The recipe
+  window's **Arrange pins** button forgets those spots and puts the pins back in their cascade.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
   from the mod loader's config page or config file.
 
@@ -43,6 +47,7 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `Menu` | `PinLayout` | `Right` | Screen edge new pinned recipes cascade from: `Right`, `Left` or `Top` |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box |
+| `Menu` | `PinPositions` | empty | Where each pin slot was last dropped, as `x,y` screen fractions separated by `;`. Set by dragging a pin; clear it to reset |
 
 ---
 
