@@ -104,10 +104,66 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"PinnedRecipe1",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 1, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe2",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 2, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe3",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 3, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe4",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 4, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe5",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 5, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe6",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 6, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe7",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 7, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
+			"PinnedRecipe8",
+			ConfigValueType::Hidden,
+			"",
+			"The asset name of pinned recipe 8, which is pinned again once a save has loaded (empty = none)"
+		},
+		{
+			"Menu",
 			"PinnedRecipes",
 			ConfigValueType::Hidden,
 			"",
-			"The pinned recipes, as their asset names separated by \";\", in pin order; they are pinned again once a save has loaded (empty = none)"
+			"Old save of all the pinned recipes in one value, replaced by PinnedRecipe1 to PinnedRecipe8; emptied once they are copied over (empty = nothing to copy)"
 		},
 		{
 			"Planner",
@@ -262,18 +318,38 @@ namespace CodexConfig
 				s_self->config->WriteString(s_self, "Menu", "PinFreeOffsets", offsets);
 		}
 
-		// The pinned recipes' keys (asset names) joined with ";" in pin order, kept so the
-		// pins come back at the next start; empty means none saved.
-		static void GetPinnedRecipes(char* out, int maxLen)
+		// The pinned recipes' keys (asset names), one per slot (1 to 8) in pin order,
+		// kept so the pins come back at the next start; empty means the slot is free.
+		// One value each because the loader's config table keeps 255 characters per
+		// value, which eight asset names in a single value could overrun.
+		static void GetPinnedRecipe(int slot, char* out, int maxLen)
+		{
+			char key[32];
+			snprintf(key, sizeof(key), "PinnedRecipe%d", slot + 1);
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", key, out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinnedRecipe(int slot, const char* key)
+		{
+			char name[32];
+			snprintf(name, sizeof(name), "PinnedRecipe%d", slot + 1);
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", name, key);
+		}
+
+		// The old single-value save of gss.14 and gss.15, read once to move its pins
+		// into the slots and then emptied (the loader cannot delete a key).
+		static void GetLegacyPinnedRecipes(char* out, int maxLen)
 		{
 			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinnedRecipes", out, maxLen, ""))
 				out[0] = '\0';
 		}
 
-		static void SetPinnedRecipes(const char* keys)
+		static void ClearLegacyPinnedRecipes()
 		{
 			if (s_self)
-				s_self->config->WriteString(s_self, "Menu", "PinnedRecipes", keys);
+				s_self->config->WriteString(s_self, "Menu", "PinnedRecipes", "");
 		}
 
 		// Saved position of the first pin for the tile or cascade arrangement: an "x,y"

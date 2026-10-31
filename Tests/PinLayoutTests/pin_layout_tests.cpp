@@ -1032,12 +1032,18 @@ int main()
 		using Keys = std::vector<std::string>;
 		const Keys three = { "CR_IronPlate", "CR_CopperWire", "CR_Aerogel" };
 
-		Check(CodexPinSet::Format({}, 1023).empty(), "no pins save as empty text", "empty");
-		Check(CodexPinSet::Parse("", kMaxPins).empty(), "empty text reads as no pins", "empty");
-		Check(CodexPinSet::Parse(nullptr, kMaxPins).empty(), "a missing value reads as no pins", "null");
+		// Encode: one key per slot, in pin order, the rest empty.
+		const Keys slots = CodexPinSet::ToSlots(three, kMaxPins);
+		Check(static_cast<int>(slots.size()) == kMaxPins, "there is always one value per slot", "slots");
+		Check(slots[0] == "CR_IronPlate" && slots[1] == "CR_CopperWire" && slots[2] == "CR_Aerogel", "keys fill the slots in pin order", "three");
+		bool restEmpty = true;
+		for (int k = 3; k < kMaxPins; ++k)
+			restEmpty = restEmpty && slots[k].empty();
+		Check(restEmpty, "the slots after the last pin are empty", "three");
+		Check(CodexPinSet::FromSlots(slots) == three, "saved pins read back in the same order", "three");
 
-		Check(CodexPinSet::Format(three, 1023) == "CR_IronPlate;CR_CopperWire;CR_Aerogel", "keys are joined in pin order", "three");
-		Check(CodexPinSet::Parse(CodexPinSet::Format(three, 1023).c_str(), kMaxPins) == three, "saved pins read back in the same order", "three");
+		Check(CodexPinSet::FromSlots(CodexPinSet::ToSlots({}, kMaxPins)).empty(), "no pins save as empty slots", "empty");
+		Check(CodexPinSet::FromSlots(Keys(kMaxPins)).empty(), "empty slots read as no pins", "empty");
 
 		// Every count from one pin up to the limit survives a round trip, in order.
 		for (int count = 1; count <= kMaxPins; ++count)
@@ -1047,20 +1053,84 @@ int main()
 				keys.push_back("CR_Recipe" + std::to_string(k * 7 + 1));
 			char what[64];
 			snprintf(what, sizeof(what), "%d pins", count);
-			Check(CodexPinSet::Parse(CodexPinSet::Format(keys, 1023).c_str(), kMaxPins) == keys, "round trip", what);
+			Check(CodexPinSet::FromSlots(CodexPinSet::ToSlots(keys, kMaxPins)) == keys, "round trip", what);
 		}
 
-		// A hand-edited value: blanks, spaces and repeats are dropped, order kept.
-		Check(CodexPinSet::Parse(" CR_A ;;CR_B;CR_A; ;CR_C", kMaxPins) == Keys({ "CR_A", "CR_B", "CR_C" }),
-			"blank entries, spaces and repeats are dropped", "hand edited");
-		Check(CodexPinSet::Parse("CR_A;CR_B;CR_C;CR_D", 2) == Keys({ "CR_A", "CR_B" }),
-			"no more pins are read than there are slots", "limit");
+		// The reason for a value per pin: eight long asset names are far past the
+		// 255 characters one config value holds, and every one of them is kept.
+		Keys longKeys;
+		for (int k = 0; k < kMaxPins; ++k)
+			longKeys.push_back("CR_" + std::string(60, static_cast<char>('A' + k)) + "_Recipe");
+		size_t joined = 0;
+		for (const std::string& key : longKeys)
+			joined += key.size() + 1;
+		Check(joined > CodexPinSet::kMaxValueLen, "the long keys would not fit one value", "long");
+		const Keys longSlots = CodexPinSet::ToSlots(longKeys, kMaxPins);
+		bool eachFits = true;
+		for (const std::string& slot : longSlots)
+			eachFits = eachFits && slot.size() <= CodexPinSet::kMaxValueLen;
+		Check(eachFits && CodexPinSet::FromSlots(longSlots) == longKeys, "eight long keys all survive", "long");
 
-		// A key that cannot be read back is not saved, nor is one that does not fit.
-		Check(CodexPinSet::Format({ "CR_A", "", "CR_B;CR_X", "CR_C" }, 1023) == "CR_A;CR_C", "empty and ';' keys are skipped", "bad keys");
-		Check(CodexPinSet::Format(three, 20) == "CR_IronPlate", "keys that do not fit are left off with all that follow", "too long");
-		Check(CodexPinSet::Format(three, 12) == "CR_IronPlate", "a key that exactly fits is kept", "exact");
-		Check(CodexPinSet::Format(three, 11).empty(), "nothing is cut in half", "short");
+		// A key that cannot be read back whole is not saved; more keys than slots are cut.
+		Check(CodexPinSet::FromSlots(CodexPinSet::ToSlots({ "CR_A", "", "CR_B", "CR_C" }, kMaxPins)) == Keys({ "CR_A", "CR_B", "CR_C" }),
+			"an empty key is skipped", "bad keys");
+		const std::string tooLong(CodexPinSet::kMaxValueLen + 1, 'x');
+		Check(CodexPinSet::FromSlots(CodexPinSet::ToSlots({ "CR_A", tooLong, "CR_B" }, kMaxPins)) == Keys({ "CR_A", "CR_B" }),
+			"a key longer than a value is skipped, not cut", "too long");
+		const std::string exact(CodexPinSet::kMaxValueLen, 'x');
+		Check(CodexPinSet::FromSlots(CodexPinSet::ToSlots({ exact }, kMaxPins)) == Keys({ exact }), "a key that exactly fits is kept", "exact");
+		Keys many;
+		for (int k = 0; k < kMaxPins + 3; ++k)
+			many.push_back("CR_" + std::to_string(k));
+		Check(static_cast<int>(CodexPinSet::ToSlots(many, kMaxPins).size()) == kMaxPins &&
+			CodexPinSet::FromSlots(CodexPinSet::ToSlots(many, kMaxPins)).size() == static_cast<size_t>(kMaxPins),
+			"no more pins are saved than there are slots", "limit");
+
+		// A hand-edited file: gaps, spaces and repeats are dropped, order kept.
+		Check(CodexPinSet::FromSlots({ " CR_A ", "", "CR_B", "CR_A", "\t", "CR_C" }) == Keys({ "CR_A", "CR_B", "CR_C" }),
+			"blank slots, spaces and repeats are dropped", "hand edited");
+
+		// The old single value (gss.14, gss.15).
+		Check(CodexPinSet::Parse("", kMaxPins).empty(), "empty text reads as no pins", "legacy");
+		Check(CodexPinSet::Parse(nullptr, kMaxPins).empty(), "a missing value reads as no pins", "legacy");
+		Check(CodexPinSet::Parse("CR_IronPlate;CR_CopperWire;CR_Aerogel", kMaxPins) == three, "old text reads in order", "legacy");
+		Check(CodexPinSet::Parse(" CR_A ;;CR_B;CR_A; ;CR_C", kMaxPins) == Keys({ "CR_A", "CR_B", "CR_C" }),
+			"blank entries, spaces and repeats are dropped", "legacy");
+		Check(CodexPinSet::Parse("CR_A;CR_B;CR_C;CR_D", 2) == Keys({ "CR_A", "CR_B" }), "no more are read than there are slots", "legacy");
+
+		// Migration: the old value moves into the slots once, only if the slots are empty.
+		bool migrated = true;
+		Keys moved = CodexPinSet::Migrate(Keys(kMaxPins), "CR_IronPlate;CR_CopperWire;CR_Aerogel", kMaxPins, migrated);
+		Check(migrated && CodexPinSet::FromSlots(moved) == three && static_cast<int>(moved.size()) == kMaxPins,
+			"the old value moves into the slots in order", "migrate");
+
+		migrated = true;
+		moved = CodexPinSet::Migrate(CodexPinSet::ToSlots({ "CR_New" }, kMaxPins), "CR_IronPlate;CR_CopperWire", kMaxPins, migrated);
+		Check(!migrated && CodexPinSet::FromSlots(moved) == Keys({ "CR_New" }), "slots that hold a pin are not overwritten", "migrate");
+
+		migrated = true;
+		moved = CodexPinSet::Migrate(Keys(kMaxPins), "", kMaxPins, migrated);
+		Check(!migrated && CodexPinSet::FromSlots(moved).empty(), "an empty old value migrates nothing", "migrate");
+
+		migrated = true;
+		moved = CodexPinSet::Migrate(Keys(kMaxPins), nullptr, kMaxPins, migrated);
+		Check(!migrated && CodexPinSet::FromSlots(moved).empty(), "a missing old value migrates nothing", "migrate");
+
+		// Run twice: once the old value is emptied nothing moves again, so
+		// pins the player has since removed do not come back.
+		migrated = false;
+		moved = CodexPinSet::Migrate(Keys(kMaxPins), "CR_A;CR_B", kMaxPins, migrated);
+		Check(migrated, "first start moves the old value", "twice");
+		moved = CodexPinSet::Migrate(Keys(kMaxPins), "", kMaxPins, migrated);
+		Check(!migrated && CodexPinSet::FromSlots(moved).empty(), "second start with the old value emptied moves nothing", "twice");
+
+		// An old value that was cut at 255 characters ends in half a key; the rest are whole.
+		std::string cut;
+		for (int k = 0; k < 6; ++k)
+			cut += "CR_" + std::string(35, static_cast<char>('A' + k)) + ";";
+		cut += "CR_Half";
+		moved = CodexPinSet::Migrate(Keys(kMaxPins), cut.c_str(), kMaxPins, migrated);
+		Check(migrated && CodexPinSet::FromSlots(moved).back() == "CR_Half", "a cut old value migrates what it holds", "migrate cut");
 	}
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);

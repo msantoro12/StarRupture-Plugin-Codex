@@ -48,10 +48,10 @@ namespace CodexUI
 		std::atomic<bool> g_restoreWaiting{ false };
 		std::atomic<bool> g_restoreRender{ false };
 
-		// The saved pin set as last read or written, kept so Clear on the config
-		// page, which empties the value, can put it back whether or not the pins
-		// are up yet. Render thread only.
-		std::string g_pinnedRecipesText;
+		// The saved pin set as last read or written, one key per slot, kept so
+		// Clear on the config page, which empties the values, can put them back
+		// whether or not the pins are up yet. Render thread only.
+		std::vector<std::string> g_savedPins;
 
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
@@ -1352,9 +1352,12 @@ namespace CodexUI
 		// All the ungrouped entries, joined with ";".
 		constexpr int kPinFreeOffsetsBufferSize = kPinOffsetBufferSize * kMaxPins;
 
-		// The pinned recipes' keys, joined with ";". The config holds a value of
-		// up to this many characters, and eight asset names take about a third.
-		constexpr int kPinnedRecipesBufferSize = 1024;
+		// One saved pin's key: the config holds a value of up to this many
+		// characters, and an asset name takes a fraction of it.
+		constexpr int kPinKeyBufferSize = static_cast<int>(CodexPinSet::kMaxValueLen) + 1;
+
+		// The old single value of all the pins, as gss.14 and gss.15 saved it.
+		constexpr int kLegacyPinnedRecipesBufferSize = 1024;
 
 		// A drop that moves the window less than this is a click, not a drag.
 		constexpr float kPinDragThreshold = 0.5f;
@@ -1526,13 +1529,15 @@ namespace CodexUI
 				return;
 			}
 
-			// Clear on the config page empties this too, but it only resets
+			// Clear on the config page empties these too, but it only resets
 			// positions: the saved pins stay, so put their copy back. The
 			// loader writes the table's value to disk after this returns.
-			if (strcmp(key, "PinnedRecipes") == 0)
+			if (strncmp(key, "PinnedRecipe", 12) == 0)
 			{
-				if (newValue[0] == '\0' && !g_pinnedRecipesText.empty())
-					CodexConfig::Config::SetPinnedRecipes(g_pinnedRecipesText.c_str());
+				const int slot = key[12] - '1';
+				if (slot >= 0 && slot < kMaxPins && key[13] == '\0' && newValue[0] == '\0' &&
+					slot < static_cast<int>(g_savedPins.size()) && !g_savedPins[slot].empty())
+					CodexConfig::Config::SetPinnedRecipe(slot, g_savedPins[slot].c_str());
 				return;
 			}
 
@@ -1613,8 +1618,42 @@ namespace CodexUI
 			const int count = PinCount();
 			for (int k = 0; k < count; ++k)
 				keys.push_back(g_pins[k].recipeKey);
-			g_pinnedRecipesText = CodexPinSet::Format(keys, kPinnedRecipesBufferSize - 1);
-			CodexConfig::Config::SetPinnedRecipes(g_pinnedRecipesText.c_str());
+			g_savedPins = CodexPinSet::ToSlots(keys, kMaxPins);
+			for (int k = 0; k < kMaxPins; ++k)
+				CodexConfig::Config::SetPinnedRecipe(k, g_savedPins[k].c_str());
+		}
+
+		// Reads the saved pins into g_savedPins. The first start after gss.14 or
+		// gss.15 finds them in the old single value instead: they are copied to
+		// the slots once and the old value is emptied.
+		void LoadSavedPins()
+		{
+			std::vector<std::string> slots(kMaxPins);
+			for (int k = 0; k < kMaxPins; ++k)
+			{
+				char key[kPinKeyBufferSize];
+				CodexConfig::Config::GetPinnedRecipe(k, key, sizeof(key));
+				slots[k] = key;
+			}
+
+			char legacy[kLegacyPinnedRecipesBufferSize];
+			CodexConfig::Config::GetLegacyPinnedRecipes(legacy, sizeof(legacy));
+
+			bool migrated = false;
+			g_savedPins = CodexPinSet::Migrate(slots, legacy, kMaxPins, migrated);
+			if (!migrated)
+			{
+				// Slots that hold pins win; a leftover old value is stale.
+				if (legacy[0] != 0)
+					CodexConfig::Config::ClearLegacyPinnedRecipes();
+				return;
+			}
+
+			for (int k = 0; k < kMaxPins; ++k)
+				CodexConfig::Config::SetPinnedRecipe(k, g_savedPins[k].c_str());
+			CodexConfig::Config::ClearLegacyPinnedRecipes();
+			LOG_INFO("CodexUI: moved %d saved pin(s) to the per-pin settings.",
+				static_cast<int>(CodexPinSet::FromSlots(g_savedPins).size()));
 		}
 
 		CodexPinLayout::Params PinLayoutParams(IModLoaderImGui* imgui)
@@ -2136,9 +2175,7 @@ namespace CodexUI
 		// move up a slot with their saved spots, as when one is unpinned.
 		void RestorePinnedRecipes(IModLoaderImGui* imgui)
 		{
-			char text[kPinnedRecipesBufferSize];
-			CodexConfig::Config::GetPinnedRecipes(text, sizeof(text));
-			const std::vector<std::string> keys = CodexPinSet::Parse(text, kMaxPins);
+			const std::vector<std::string> keys = CodexPinSet::FromSlots(g_savedPins);
 			if (keys.empty() || AnyPinned())
 				return;
 
@@ -2580,11 +2617,7 @@ namespace CodexUI
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 		LoadPinSettings();
 		RegisterPinSlots(self);
-		{
-			char text[kPinnedRecipesBufferSize];
-			CodexConfig::Config::GetPinnedRecipes(text, sizeof(text));
-			g_pinnedRecipesText = text;
-		}
+		LoadSavedPins();
 		g_restoreWaiting = true;
 		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 

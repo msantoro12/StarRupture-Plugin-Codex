@@ -68,7 +68,7 @@ On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `P
 box and pin positions have no field: the **Saved state** row at the end of the `Menu`
 section has a **Clear** button that puts the search box back in the centre and the pins back
 on their edge at once, even with the search box open. The saved pins are not touched, so they
-still come back at the next start; only pinning and unpinning change them. Values already in your config file
+still come back at the next start; only pinning and unpinning change them. The button counts the saved pins like any other saved value, so it can look enabled when only they differ from their defaults; pressing it then changes nothing. Values already in your config file
 keep working, and choices match ignoring case. The dropdowns and the hidden entries need a
 loader that has the Choice and Hidden config types (v71); on an older one the page shows
 them as plain text fields.
@@ -90,7 +90,8 @@ them as plain text fields.
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
 | `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 | `Menu` | `PinFreeOffsets` | empty | Where each pin was last placed while ungrouped, as `x,y` screen fractions separated by `;`, in pin order. Set by dragging a pin or pinning one; the first pin's spot is used again for the next first pin. No field on the config page; Clear resets it and puts the pins where they would go if just pinned |
-| `Menu` | `PinnedRecipes` | empty | The pinned recipes' asset names separated by `;`, in pin order. Written when a recipe is pinned or unpinned, and read once a save has finished loading to pin them again. Saved for the game, not per save. No field on the config page; Clear leaves it alone and the pins stay up |
+| `Menu` | `PinnedRecipe1` to `PinnedRecipe8` | empty | The asset name of each pinned recipe, one entry per pin, in pin order (empty = no pin in that slot). Written when a recipe is pinned or unpinned, and read once a save has finished loading to pin them again. One entry each because the config page keeps up to 255 characters per value, which eight long names in a single value could overrun. Saved for the game, not per save. No field on the config page; Clear leaves them alone and the pins stay up |
+| `Menu` | `PinnedRecipes` | empty | Old single-value save of the pinned recipes, from earlier test builds. Read once at start to copy its pins to `PinnedRecipe1` to `PinnedRecipe8`, then emptied; unused afterwards |
 | `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 
 ---
