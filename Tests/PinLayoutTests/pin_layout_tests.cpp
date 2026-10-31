@@ -66,7 +66,7 @@ namespace
 		p.step = 30.0f * c.fontScale;
 		p.edge = c.edge;
 		p.cascade = c.cascade;
-		p.gap = c.gap;
+		p.gap = c.gap ? p.step - p.frame : 0.0f;
 		return p;
 	}
 
@@ -132,6 +132,298 @@ namespace
 		}
 		else
 			Check(at[0].x == want.x && at[0].y == want.y, "lead stays where it was put", where);
+	}
+}
+
+namespace
+{
+	// The pins' extent along the edge, and whether the group is centered on it.
+	bool Centered(const Params& p, const Size* sizes, const Point* at, int count, float tolerance)
+	{
+		float lo = 0.0f, hi = 0.0f;
+		detail::SpanAlongEdge(p, sizes, at, count, lo, hi);
+		const float limit = p.edge == Edge::Top ? p.screenW : p.screenH;
+		return std::fabs(lo - (limit - hi)) <= tolerance;
+	}
+
+	// Whether the whole group fits in one line along the edge, so it is not wrapped.
+	bool FitsInOneLine(const Params& p, const Size* sizes, int count)
+	{
+		const float limit = p.edge == Edge::Top ? p.screenW : p.screenH;
+		float used = 2.0f * p.step;
+		for (int k = 0; k < count; ++k)
+			used += (p.edge == Edge::Top ? sizes[k].w : sizes[k].h) + p.gap;
+		return used <= limit;
+	}
+
+	bool AllOnScreen(const Params& p, const Size* sizes, const Point* at, int count)
+	{
+		bool inside = true;
+		for (int k = 0; k < count; ++k)
+			inside = inside && std::isfinite(at[k].x) && std::isfinite(at[k].y) && at[k].x >= -0.01f && at[k].y >= -0.01f &&
+				at[k].x + sizes[k].w <= p.screenW + 0.01f && at[k].y + sizes[k].h <= p.screenH + 0.01f;
+		return inside;
+	}
+
+	const char* EdgeName(Edge e)
+	{
+		return e == Edge::Right ? "Right" : e == Edge::Left ? "Left" : "Top";
+	}
+
+	// Centering, layout switching, gliding and the spacing option.
+	void RunCenteringTests()
+	{
+		const float kGaps[] = { 1.0f, 6.0f, 50.0f };
+
+		// 12. Centering. The group's span along the edge is centered on the
+		//     screen whenever the pins fit in one line; the lead's own position
+		//     along the edge is ignored (a drag only moves it across); across the
+		//     edge it is kept; adding and removing pins re-centers each time.
+		printf("centering\n");
+		{
+			int centered = 0, ignored = 0, sequences = 0;
+			for (const Resolution& res : kResolutions)
+			for (float fontScale : { 1.0f, 2.0f })
+			for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+			for (bool cascade : { false, true })
+			for (float gap : kGaps)
+			{
+				Case c{ &res, fontScale, edge, cascade, true, 1, "", {} };
+				Params p = MakeParams(c);
+				p.gap = gap;
+				p.center = true;
+				Size sizes[kMaxPins];
+				for (int k = 0; k < kMaxPins; ++k)
+					sizes[k] = { kBasePins[k].w * fontScale, kBasePins[k].h * fontScale };
+
+				// Pins pinned one after the other, then unpinned one by one.
+				for (int step = 0; step < 2 * kMaxPins - 1; ++step)
+				{
+					const int count = step < kMaxPins ? step + 1 : 2 * kMaxPins - 1 - step;
+					c.count = count;
+					const Point lead = DefaultLead(p, sizes[0]);
+					c.leadName = "default";
+					c.lead = lead;
+					Point at[kMaxPins];
+					Arrange(p, sizes, count, lead, at);
+					Check(AllOnScreen(p, sizes, at, count), "every pin fully on screen", Describe(c));
+
+					const bool alongX = edge == Edge::Top;
+					const bool fits = cascade
+						? [&] { float fitH = 0.0f; for (int k = 0; k < count; ++k) fitH = (std::max)(fitH, sizes[k].h + p.step * static_cast<float>(k)); return fitH <= p.screenH; }()
+						: FitsInOneLine(p, sizes, count);
+					if (fits && !(cascade && alongX))
+					{
+						Check(Centered(p, sizes, at, count, 1.0f), "the group is centered along the edge", Describe(c));
+						++centered;
+					}
+					else if (fits)
+					{
+						// A Top cascade steps sideways: its span is the lead plus the steps.
+						Check(Centered(p, sizes, at, count, 1.0f), "the Top cascade is centered across the screen", Describe(c));
+						++centered;
+					}
+
+					// The lead's position along the edge makes no difference; across it, the lead's is kept.
+					Point other[kMaxPins];
+					Arrange(p, sizes, count, { alongX ? 17.0f : lead.x, alongX ? lead.y : 23.0f }, other);
+					Point again[kMaxPins];
+					Arrange(p, sizes, count, { alongX ? res.w - sizes[0].w : lead.x, alongX ? lead.y : res.h - sizes[0].h }, again);
+					bool same = true;
+					for (int k = 0; k < count; ++k)
+						same = same && other[k].x == again[k].x && other[k].y == again[k].y;
+					Check(same, "centered: the lead's spot along the edge is ignored", Describe(c));
+					Check(alongX ? other[0].y == at[0].y || cascade : other[0].x == at[0].x, "centered: the lead's spot across the edge is kept", Describe(c));
+					++ignored;
+					++sequences;
+				}
+			}
+			printf("  %d centered groups checked, %d drags checked\n", centered, ignored);
+			(void)sequences;
+		}
+
+		// With centering off the lead goes where it is put, as before.
+		{
+			Case c{ &kResolutions[1], 1.0f, Edge::Right, false, true, 3, "free", { 700.0f, 300.0f } };
+			Params p = MakeParams(c);
+			Size sizes[3] = { { 280, 150 }, { 300, 120 }, { 260, 190 } };
+			Point at[3];
+			Arrange(p, sizes, 3, c.lead, at);
+			Check(at[0].x == 700.0f && at[0].y == 300.0f, "centering off: the lead is free on both axes", Describe(c));
+		}
+
+		// 13. Spawning pins one after the other, centered (ungrouped).
+		printf("centered spawn\n");
+		{
+			int checked = 0;
+			for (const Resolution& res : kResolutions)
+			for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+			for (bool cascade : { false, true })
+			for (int count = 1; count <= kMaxPins; ++count)
+			{
+				Case c{ &res, 1.0f, edge, cascade, true, count, "default", {} };
+				Params p = MakeParams(c);
+				p.gap = 6.0f;
+				p.center = true;
+				Size sizes[kMaxPins];
+				for (int k = 0; k < count; ++k)
+					sizes[k] = kBasePins[k];
+				Point at[kMaxPins];
+				SpawnAll(p, sizes, count, at);
+				Check(AllOnScreen(p, sizes, at, count), "spawned pins are all on screen", Describe(c));
+
+				// Centered, unless the pins did not fit in one line along the edge.
+				float lo = 0.0f, hi = 0.0f;
+				detail::SpanAlongEdge(p, sizes, at, count, lo, hi);
+				const float limit = edge == Edge::Top ? res.w : res.h;
+				if (hi - lo < limit && lo >= 0.0f && hi <= limit)
+					Check(Centered(p, sizes, at, count, 1.0f), "spawned pins are centered along the edge", Describe(c));
+				++checked;
+			}
+			printf("  %d spawns checked\n", checked);
+		}
+
+		// 14. Switching the layout. Every ordered pair of edges, grouped (the
+		//     lead) and ungrouped (every pin).
+		printf("layout switch\n");
+		{
+			int pairs = 0;
+			for (const Resolution& res : kResolutions)
+			for (Edge from : { Edge::Right, Edge::Left, Edge::Top })
+			for (Edge to : { Edge::Right, Edge::Left, Edge::Top })
+			for (bool center : { true, false })
+			for (int count : { 1, 3, 6 })
+			{
+				Case cf{ &res, 1.0f, from, false, true, count, "default", {} };
+				Case ct{ &res, 1.0f, to, false, true, count, "default", {} };
+				Params pf = MakeParams(cf);
+				Params pt = MakeParams(ct);
+				pf.gap = pt.gap = 6.0f;
+				pf.center = pt.center = center;
+				Size sizes[kMaxPins];
+				for (int k = 0; k < count; ++k)
+					sizes[k] = kBasePins[k];
+				char what[160];
+				snprintf(what, sizeof(what), "%s %s -> %s centering %s %d pins", res.name, EdgeName(from), EdgeName(to), center ? "on" : "off", count);
+				const std::string where = what;
+
+				// Grouped: the lead wherever the player left it.
+				const Point left{ res.w * 0.62f, res.h * 0.4f };
+				const Point lead = SwitchLead(pf, pt, sizes, count, left);
+				Check(lead.x >= 0.0f && lead.y >= 0.0f && lead.x + sizes[0].w <= res.w + 0.01f && lead.y + sizes[0].h <= res.h + 0.01f,
+					"switch: the lead lands on screen", where);
+				if (from == to)
+					Check(lead.x == left.x && lead.y == left.y, "switch to the same edge changes nothing", where);
+				else if (from != Edge::Top && to != Edge::Top)
+				{
+					Check(std::fabs(lead.y - left.y) < 0.01f, "mirror: the vertical position is kept", where);
+					Check(std::fabs((res.w - lead.x - sizes[0].w) - left.x) < 0.01f, "mirror: the distance from the edge is kept", where);
+					const Point back = SwitchLead(pt, pf, sizes, count, lead);
+					Check(std::fabs(back.x - left.x) < 0.01f && std::fabs(back.y - left.y) < 0.01f, "mirror twice is where it started", where);
+				}
+				else if (to == Edge::Top)
+				{
+					Point at[kMaxPins];
+					Params arranged = pt;
+					arranged.center = false; // the anchor alone centers it
+					Arrange(arranged, sizes, count, lead, at);
+					Check(std::fabs(lead.y - DefaultLead(pt, sizes[0]).y) < 0.01f, "to Top: lined up along the top", where);
+					if (FitsInOneLine(pt, sizes, count))
+						Check(Centered(arranged, sizes, at, count, 1.0f), "to Top: centered across the screen", where);
+				}
+				else
+				{
+					Check(std::fabs(lead.x - DefaultLead(pt, sizes[0]).x) < 0.01f, "from Top: at the new edge", where);
+					if (center)
+					{
+						Point at[kMaxPins];
+						Params arranged = pt;
+						arranged.center = false;
+						Arrange(arranged, sizes, count, lead, at);
+						if (FitsInOneLine(pt, sizes, count))
+							Check(Centered(arranged, sizes, at, count, 1.0f), "from Top: centered down the screen", where);
+					}
+					else
+						Check(std::fabs(lead.y - DefaultLead(pt, sizes[0]).y) < 0.01f, "from Top, centering off: the default spot", where);
+				}
+
+				// Ungrouped: every pin its own spot.
+				Point free[kMaxPins];
+				for (int k = 0; k < count; ++k)
+					free[k] = ClampToScreen(pf, sizes[k], { res.w * (0.2f + 0.1f * static_cast<float>(k)), res.h * (0.1f + 0.12f * static_cast<float>(k)) });
+				Point moved[kMaxPins];
+				for (int k = 0; k < count; ++k)
+					moved[k] = free[k];
+				SwitchAll(pf, pt, sizes, count, moved);
+				bool onScreen = true;
+				for (int k = 0; k < count; ++k)
+					onScreen = onScreen && moved[k].x >= -0.01f && moved[k].y >= -0.01f && moved[k].x + sizes[k].w <= res.w + 0.01f && moved[k].y + sizes[k].h <= res.h + 0.01f;
+				Check(onScreen, "switch: every pin lands on screen", where);
+				if (from == to)
+				{
+					bool kept = true;
+					for (int k = 0; k < count; ++k)
+						kept = kept && moved[k].x == free[k].x && moved[k].y == free[k].y;
+					Check(kept, "switch to the same edge moves no pin", where);
+				}
+				else if (from != Edge::Top && to != Edge::Top)
+				{
+					bool mirrored = true;
+					for (int k = 0; k < count; ++k)
+						mirrored = mirrored && std::fabs(moved[k].y - free[k].y) < 0.01f && std::fabs((res.w - moved[k].x - sizes[k].w) - free[k].x) < 0.01f;
+					Check(mirrored, "mirror: every pin keeps its height and its distance from the edge", where);
+				}
+				else
+				{
+					float lo = 0.0f, hi = 0.0f;
+					Params span = pt;
+					detail::SpanAlongEdge(span, sizes, moved, count, lo, hi);
+					const float limit = to == Edge::Top ? res.w : res.h;
+					if ((to == Edge::Top || center) && hi - lo < limit)
+						Check(Centered(span, sizes, moved, count, 1.0f), "pins placed again are centered along the new edge", where);
+				}
+				++pairs;
+			}
+			printf("  %d layout switches checked\n", pairs);
+		}
+
+		// 15. Gliding. Short, ease-out, lands exactly on its target.
+		printf("glide\n");
+		{
+			Check(EaseOut(0.0f) == 0.0f && EaseOut(1.0f) == 1.0f, "ease-out starts at 0 and ends at 1", "ease");
+			Check(EaseOut(-1.0f) == 0.0f && EaseOut(2.0f) == 1.0f, "ease-out is clamped", "ease");
+			bool rising = true;
+			for (int i = 0; i < 100; ++i)
+				rising = rising && EaseOut(static_cast<float>(i + 1) / 100.0f) >= EaseOut(static_cast<float>(i) / 100.0f);
+			Check(rising, "ease-out never goes backwards", "ease");
+			Check(EaseOut(0.5f) > 0.5f, "ease-out is fast first and settles at the end", "ease");
+			Check(kGlideSeconds >= 0.15f && kGlideSeconds <= 0.2f, "a glide lasts 150 to 200 ms", "ease");
+
+			const Point from{ 100.0f, 400.0f }, to{ 1500.0f, 120.0f };
+			const Point start = GlideAt(from, to, 0.0f);
+			const Point end = GlideAt(from, to, kGlideSeconds);
+			const Point past = GlideAt(from, to, 5.0f);
+			Check(start.x == from.x && start.y == from.y, "a glide starts at its source", "glide");
+			Check(std::fabs(end.x - to.x) < 0.001f && std::fabs(end.y - to.y) < 0.001f, "a glide ends on its target", "glide");
+			Check(std::fabs(past.x - to.x) < 0.001f && std::fabs(past.y - to.y) < 0.001f, "a glide stays on its target afterwards", "glide");
+			const Point mid = GlideAt(from, to, kGlideSeconds * 0.5f);
+			Check(mid.x > from.x && mid.x < to.x && mid.y < from.y && mid.y > to.y, "midway is between source and target", "glide");
+		}
+
+		// 16. The spacing option: 1 to 50, the old on/off text keeps its meaning.
+		printf("spacing\n");
+		{
+			struct Case2 { const char* text; int want; };
+			const Case2 cases[] = {
+				{ "true", kGapDefault }, { "TRUE", kGapDefault }, { "false", kGapMin }, { "", kGapDefault },
+				{ "1", 1 }, { "6", 6 }, { "25", 25 }, { "50", 50 }, { "0", 1 }, { "-4", 1 }, { "51", 50 },
+				{ "900", 50 }, { "nonsense", kGapDefault },
+			};
+			for (const Case2& c2 : cases)
+				Check(GapFromText(c2.text) == c2.want, "spacing text maps into 1 to 50", c2.text);
+			Check(GapFromText(nullptr) == kGapDefault, "no text is the default spacing", "null");
+			Check(kGapMin == 1 && kGapMax == 50, "the spacing runs from 1 to 50", "range");
+		}
 	}
 }
 
@@ -698,6 +990,7 @@ int main()
 		}
 		printf("  %d pins checked\n", kMaxPins);
 	}
+	RunCenteringTests();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;

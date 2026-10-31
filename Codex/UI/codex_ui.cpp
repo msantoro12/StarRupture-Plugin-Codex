@@ -129,6 +129,8 @@ namespace CodexUI
 		bool IsPinned(void* nativeRecipe);
 		bool HasFreePinSlot();
 		bool AnyPinned();
+		int  PinCount();
+		void SwitchSpotsWithoutPins();
 
 		std::string ToLower(const std::string& s)
 		{
@@ -1216,6 +1218,17 @@ namespace CodexUI
 			bool  valid = false;
 		};
 
+		// A pin easing from where it was to its new spot (CodexPinLayout::GlideAt).
+		// The spot it is heading for is `to`; the in-between frames are only ever
+		// requested as the window's position, never saved.
+		struct PinGlide
+		{
+			bool                   active = false;
+			CodexPinLayout::Point  from;
+			CodexPinLayout::Point  to;
+			float                  elapsed = 0.0f;
+		};
+
 		struct PinSlot
 		{
 			void*             nativeRecipe = nullptr;
@@ -1232,6 +1245,8 @@ namespace CodexUI
 			bool              placePending = false; // ungrouped: a new pin waiting for its size to be placed
 			bool              placeWait = false;    // ... and for its window to have been drawn once, so the size is its own
 			bool              applyFree = false;    // ungrouped: put the window at its saved spot
+			PinGlide          glide;                // easing to a new spot on its own
+			bool              fresh = false;        // just pinned: its first spot is taken at once, not eased to
 		};
 
 		PinSlot  g_pins[kMaxPins];
@@ -1255,7 +1270,8 @@ namespace CodexUI
 		{
 			bool      cascade = false;
 			PinEdge   edge = PinEdge::Right;
-			bool      gap = true;
+			int       gap = CodexPinLayout::kGapDefault; // pixels between tiles
+			bool      center = true;
 			PinAnchor anchors[2]; // indexed by `cascade`
 			bool      free = false; // ungrouped: every pin has its own spot
 			PinAnchor freeAnchors[kMaxPins]; // ungrouped: each pin's spot, in pin order
@@ -1280,6 +1296,24 @@ namespace CodexUI
 		bool g_pinModeChanged = false;
 		bool g_pinApplyFree = false;
 		bool g_pinRespawn = false;
+
+		// Ungrouped, set once the player has dragged a pin by hand (or the saved
+		// spots came from an earlier session): centering then leaves the pins
+		// alone when a pin is added or removed. Clear and Arrange reset it.
+		bool g_pinHandPlaced = false;
+
+		// The PinLayout was changed while pins were up (the edge it was before):
+		// the first pin's render moves the pins to the closest equivalent spot.
+		bool    g_pinSwitchPending = false;
+		PinEdge g_pinSwitchFrom = PinEdge::Right;
+
+		// Pins that move on their own ease to their new spot. For this long after
+		// such a move was set off (a pin added or removed, a layout switch, Clear,
+		// Arrange), a pin whose spot changes glides instead of jumping.
+		constexpr float kPinGlideWindow = 0.4f;
+		float  g_pinGlideWindow = 0.0f;
+		double g_pinLastTime = 0.0;
+		float  g_pinDeltaTime = 0.0f;
 
 		// One "0.1234,0.5678" entry, with room to spare.
 		constexpr int kPinOffsetBufferSize = 32;
@@ -1363,8 +1397,27 @@ namespace CodexUI
 				next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge)
 				g_pinReanchor = true;
 
+			if (next.edge != g_pinSettings.edge)
+			{
+				if (!g_pinSwitchPending)
+					g_pinSwitchFrom = g_pinSettings.edge;
+				g_pinSwitchPending = true;
+			}
+
 			if (next.free != g_pinSettings.free)
 				g_pinModeChanged = true;
+
+			// Layout changes move the pins on their own: they glide. (A drop saved
+			// and read back rounded is not one.)
+			const int arrangement = next.cascade ? 1 : 0;
+			if (next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge || next.gap != g_pinSettings.gap ||
+				next.center != g_pinSettings.center || next.anchors[arrangement].set != g_pinSettings.anchors[arrangement].set)
+				g_pinGlideWindow = kPinGlideWindow;
+
+			// Ungrouped, turning centering on is a layout change too: the pins
+			// nobody placed by hand are placed again.
+			if (next.free && next.center != g_pinSettings.center && !g_pinHandPlaced)
+				g_pinRespawn = true;
 
 			bool anySet = false, wasSet = false, changed = false;
 			for (int k = 0; k < kMaxPins; ++k)
@@ -1374,7 +1427,11 @@ namespace CodexUI
 				changed = changed || !SamePinAnchor(next.freeAnchors[k], g_pinSettings.freeAnchors[k]);
 			}
 			if (changed && !anySet && wasSet)
+			{
 				g_pinRespawn = true; // cleared
+				g_pinHandPlaced = false;
+				g_pinGlideWindow = kPinGlideWindow;
+			}
 			else if (changed)
 				g_pinApplyFree = true; // edited by hand
 
@@ -1398,13 +1455,20 @@ namespace CodexUI
 			next.cascade = _stricmp(CodexConfig::Config::GetPinArrangement(), "Cascade") == 0;
 			next.edge = ParsePinEdge(CodexConfig::Config::GetPinLayout());
 			next.gap = CodexConfig::Config::GetPinGap();
+			next.center = CodexConfig::Config::GetPinCentering();
 			next.anchors[0] = ReadPinAnchor(false);
 			next.anchors[1] = ReadPinAnchor(true);
 			next.free = _stricmp(CodexConfig::Config::GetPinGrouping(), "Ungrouped") == 0;
 			char text[kPinFreeOffsetsBufferSize];
 			CodexConfig::Config::GetPinFreeOffsets(text, sizeof(text));
 			ParsePinFreeAnchors(text, next.freeAnchors);
+			// Spots saved by an earlier session may have been placed by hand.
+			for (const PinAnchor& anchor : next.freeAnchors)
+				g_pinHandPlaced = g_pinHandPlaced || anchor.set;
 			ApplyPinSettings(next);
+			// Starting up is not a layout change: nothing is switched or eased.
+			g_pinSwitchPending = false;
+			g_pinGlideWindow = 0.0f;
 		}
 
 		// Live edits arrive here with the new value; the config file itself
@@ -1433,7 +1497,9 @@ namespace CodexUI
 			else if (strcmp(key, "PinLayout") == 0)
 				next.edge = ParsePinEdge(newValue);
 			else if (strcmp(key, "PinGap") == 0)
-				next.gap = _stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0;
+				next.gap = CodexPinLayout::GapFromText(newValue);
+			else if (strcmp(key, "PinCentering") == 0)
+				next.center = _stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0;
 			else if (strcmp(key, "PinTileOffset") == 0)
 				next.anchors[0] = ParsePinAnchor(newValue);
 			else if (strcmp(key, "PinCascadeOffset") == 0)
@@ -1503,8 +1569,100 @@ namespace CodexUI
 			params.frame = imgui->GetFrameHeight();
 			params.edge = g_pinSettings.edge;
 			params.cascade = g_pinSettings.cascade;
-			params.gap = g_pinSettings.gap;
+			params.gap = static_cast<float>(g_pinSettings.gap);
+			params.center = g_pinSettings.center;
 			return params;
+		}
+
+		// Asks for a pin's window to be put at `at`; applied by its next Begin.
+		void RequestPinPos(PinSlot& slot, CodexPinLayout::Point at)
+		{
+			slot.hints.pivot_x = 0.0f;
+			slot.hints.pivot_y = 0.0f;
+			slot.hints.pos_cond = 0;
+			slot.hints.pos_x = at.x;
+			slot.hints.pos_y = at.y;
+		}
+
+		// Where a pin is, or is heading for while it glides.
+		CodexPinLayout::Point PinSpot(const PinSlot& slot)
+		{
+			return slot.glide.active ? slot.glide.to : CodexPinLayout::Point{ slot.rect.x, slot.rect.y };
+		}
+
+		// Starts the short window in which pins whose spot changes glide to it.
+		void ArmPinGlide()
+		{
+			g_pinGlideWindow = kPinGlideWindow;
+		}
+
+		// A drag is a move by hand: nothing eases, everything follows at once.
+		void CancelPinGlides()
+		{
+			g_pinGlideWindow = 0.0f;
+			for (PinSlot& slot : g_pins)
+				slot.glide.active = false;
+		}
+
+		// Puts a pin the layout moves at `at`: straight away, or, for a short while
+		// after a move was set off (ArmPinGlide), by easing there from where it is.
+		// A glide already under way is only given its new target. A new pin takes
+		// its first spot at once, and a pin being dragged never eases. `pending`
+		// asks for the position whatever the window measured (an anchor or a drag
+		// in progress, the followers every frame).
+		void SetPinTarget(PinSlot& slot, CodexPinLayout::Point at, bool pending)
+		{
+			if (slot.glide.active)
+			{
+				slot.glide.to = at;
+				return;
+			}
+
+			const CodexPinLayout::Point shown{ slot.rect.x, slot.rect.y };
+			const bool moves = slot.rect.valid &&
+				(std::fabs(at.x - shown.x) > kPinDragThreshold || std::fabs(at.y - shown.y) > kPinDragThreshold);
+			if (moves && g_pinGlideWindow > 0.0f && !slot.fresh && !slot.dragging)
+			{
+				slot.glide = { true, shown, at, 0.0f };
+				return;
+			}
+
+			slot.fresh = false;
+			if (CodexPinLayout::LeadNeedsRequest(pending, at, shown, kPinDragThreshold))
+				RequestPinPos(slot, at);
+		}
+
+		// Once a frame, from the first pin's render: the time since the last frame
+		// and the end of the gliding window.
+		void AdvancePinClock(IModLoaderImGui* imgui)
+		{
+			const double now = imgui->GetTime();
+			g_pinDeltaTime = static_cast<float>(std::clamp(now - g_pinLastTime, 0.0, 0.1));
+			g_pinLastTime = now;
+			g_pinGlideWindow = (std::max)(0.0f, g_pinGlideWindow - g_pinDeltaTime);
+		}
+
+		// Advances every glide and asks for the window at its eased spot, once
+		// the layout has set this frame's targets. Only the target is ever saved.
+		void StepPinGlides()
+		{
+			for (PinSlot& slot : g_pins)
+			{
+				PinGlide& glide = slot.glide;
+				if (!glide.active)
+					continue;
+
+				glide.elapsed += g_pinDeltaTime;
+				// The first pin's request is applied by the next frame's Begin and the
+				// others' by this frame's, so the first looks one frame ahead and they
+				// arrive together.
+				const float t = glide.elapsed + (&slot == &g_pins[0] ? g_pinDeltaTime : 0.0f);
+				const bool done = t >= CodexPinLayout::kGlideSeconds;
+				const CodexPinLayout::Point at = done ? glide.to : CodexPinLayout::GlideAt(glide.from, glide.to, t);
+				RequestPinPos(slot, { std::round(at.x), std::round(at.y) });
+				if (glide.elapsed >= CodexPinLayout::kGlideSeconds)
+					glide.active = false;
+			}
 		}
 
 		// Puts the lead pin at its anchor: where the player last dropped it
@@ -1525,11 +1683,7 @@ namespace CodexUI
 				? CodexPinLayout::LeadFromFraction(params, size, anchor.x, anchor.y)
 				: CodexPinLayout::DefaultLead(params, size);
 
-			slot.hints.pivot_x = 0.0f;
-			slot.hints.pivot_y = 0.0f;
-			slot.hints.pos_cond = 0;
-			slot.hints.pos_x = at.x;
-			slot.hints.pos_y = at.y;
+			SetPinTarget(slot, at, true);
 		}
 
 		// Called from the lead's render, so the followers' hints are in place
@@ -1548,41 +1702,18 @@ namespace CodexUI
 				sizes[k] = { g_pins[k].rect.w, g_pins[k].rect.h };
 			}
 
-			// A requested move that has not been applied yet counts as the lead's spot.
-			const bool moving = lead.hints.pos_x >= 0.0f && lead.hints.pos_y >= 0.0f;
+			// A requested move that has not been applied yet counts as the lead's
+			// spot, and so does the spot a gliding lead is heading for. With
+			// centering on, Arrange keeps the lead's spot across the edge (the
+			// drag) and puts it where the group is centered along the edge.
+			const bool moving = !lead.glide.active && lead.hints.pos_x >= 0.0f && lead.hints.pos_y >= 0.0f;
 			CodexPinLayout::Point at[kMaxPins];
 			CodexPinLayout::Arrange(PinLayoutParams(imgui), sizes, count,
-				moving ? CodexPinLayout::Point{ lead.hints.pos_x, lead.hints.pos_y }
-					   : CodexPinLayout::Point{ lead.rect.x, lead.rect.y }, at);
+				moving ? CodexPinLayout::Point{ lead.hints.pos_x, lead.hints.pos_y } : PinSpot(lead), at);
 
-			if (CodexPinLayout::LeadNeedsRequest(moving, at[0], { lead.rect.x, lead.rect.y }, kPinDragThreshold))
-			{
-				lead.hints.pivot_x = 0.0f;
-				lead.hints.pivot_y = 0.0f;
-				lead.hints.pos_cond = 0;
-				lead.hints.pos_x = at[0].x;
-				lead.hints.pos_y = at[0].y;
-			}
-
+			SetPinTarget(lead, at[0], moving);
 			for (int k = 1; k < count; ++k)
-			{
-				PinSlot& follower = g_pins[k];
-				follower.hints.pivot_x = 0.0f;
-				follower.hints.pivot_y = 0.0f;
-				follower.hints.pos_cond = 0;
-				follower.hints.pos_x = at[k].x;
-				follower.hints.pos_y = at[k].y;
-			}
-		}
-
-		// Asks for a pin's window to be put at `at`; applied by its next Begin.
-		void RequestPinPos(PinSlot& slot, CodexPinLayout::Point at)
-		{
-			slot.hints.pivot_x = 0.0f;
-			slot.hints.pivot_y = 0.0f;
-			slot.hints.pos_cond = 0;
-			slot.hints.pos_x = at.x;
-			slot.hints.pos_y = at.y;
+				SetPinTarget(g_pins[k], at[k], true);
 		}
 
 		// Ungrouped: remembers where pin `index` sits, as a screen fraction.
@@ -1590,6 +1721,103 @@ namespace CodexUI
 		{
 			const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, at);
 			g_pinSettings.freeAnchors[index] = { fraction.x, fraction.y, true };
+		}
+
+		// The PinLayout was changed: moves the pins to the closest equivalent of
+		// where they were (CodexPinLayout::SwitchLead and SwitchAll). Grouped, that
+		// is the lead's anchor, which the lead is then put back at; ungrouped,
+		// every pin's own spot. The other arrangement's saved anchor is mirrored
+		// along, or forgotten when it has no equivalent.
+		void ApplyEdgeSwitch(const CodexPinLayout::Params& to)
+		{
+			if (!g_pinSwitchPending)
+				return;
+
+			const int count = PinCount();
+			CodexPinLayout::Size sizes[kMaxPins];
+			for (int k = 0; k < count; ++k)
+			{
+				if (!g_pins[k].rect.valid)
+					return; // sizes are not known yet; tried again next frame
+				sizes[k] = { g_pins[k].rect.w, g_pins[k].rect.h };
+			}
+			g_pinSwitchPending = false;
+			if (count <= 0)
+				return;
+
+			CodexPinLayout::Params from = to;
+			from.edge = g_pinSwitchFrom;
+			const bool mirror = from.edge != PinEdge::Top && to.edge != PinEdge::Top;
+			if (from.edge == to.edge)
+				return;
+
+			if (g_pinSettings.free)
+			{
+				CodexPinLayout::Point at[kMaxPins];
+				for (int k = 0; k < count; ++k)
+					at[k] = PinSpot(g_pins[k]);
+				CodexPinLayout::SwitchAll(from, to, sizes, count, at);
+				for (int k = 0; k < count; ++k)
+				{
+					SetPinFreeAnchor(to, k, at[k]);
+					SetPinTarget(g_pins[k], at[k], true);
+					g_pins[k].applyFree = false;
+				}
+				CommitPinFreeAnchors();
+				g_pinApplyFree = false;
+				// Placed again as if just pinned: nobody's hand has placed them.
+				if (!mirror)
+					g_pinHandPlaced = false;
+			}
+			else
+			{
+				const bool cascade = g_pinSettings.cascade;
+				const CodexPinLayout::Point lead = CodexPinLayout::SwitchLead(from, to, sizes, count, PinSpot(g_pins[0]));
+				const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(to, lead);
+				g_pinSettings.anchors[cascade ? 1 : 0] = { fraction.x, fraction.y, true };
+				WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
+
+				PinAnchor& other = g_pinSettings.anchors[cascade ? 0 : 1];
+				if (other.set)
+				{
+					if (mirror)
+						other.x = std::clamp(1.0f - other.x - sizes[0].w / to.screenW, 0.0f, 1.0f);
+					else
+						other = PinAnchor{};
+					WritePinAnchor(!cascade, other);
+				}
+				g_pinReanchor = true;
+			}
+			ArmPinGlide();
+		}
+
+		// The PinLayout was changed while no pin was up (nothing to measure): the
+		// saved spots are mirrored with the last known lead width, or forgotten
+		// when the new edge has no equivalent. Done when the next pin is pinned.
+		void SwitchSpotsWithoutPins()
+		{
+			g_pinSwitchPending = false;
+			if (g_pinSwitchFrom == g_pinSettings.edge)
+				return;
+
+			const bool mirror = g_pinSwitchFrom != PinEdge::Top && g_pinSettings.edge != PinEdge::Top;
+			const float width = g_displayW > 0.0f ? g_pinAnchoredLeadW / g_displayW : 0.0f;
+			auto move = [&](PinAnchor& anchor) {
+				if (!anchor.set)
+					return;
+				if (mirror)
+					anchor.x = std::clamp(1.0f - anchor.x - width, 0.0f, 1.0f);
+				else
+					anchor = PinAnchor{};
+			};
+			for (int arrangement = 0; arrangement < 2; ++arrangement)
+			{
+				move(g_pinSettings.anchors[arrangement]);
+				WritePinAnchor(arrangement == 1, g_pinSettings.anchors[arrangement]);
+			}
+			for (PinAnchor& anchor : g_pinSettings.freeAnchors)
+				move(anchor);
+			CommitPinFreeAnchors();
 		}
 
 		// Ungrouped, first pin's render. Acts on a changed grouping, hand-edited
@@ -1609,7 +1837,7 @@ namespace CodexUI
 					for (int k = 0; k < count; ++k)
 					{
 						if (g_pins[k].rect.valid)
-							SetPinFreeAnchor(params, k, { g_pins[k].rect.x, g_pins[k].rect.y });
+							SetPinFreeAnchor(params, k, PinSpot(g_pins[k]));
 						else
 							g_pins[k].placePending = g_pins[k].placeWait = true;
 						g_pins[k].applyFree = false;
@@ -1621,11 +1849,13 @@ namespace CodexUI
 					// Ungrouped to grouped: the lead stays where it is, as the
 					// arrangement's anchor, and the rest snap back under it (PlacePins).
 					const bool cascade = g_pinSettings.cascade;
-					const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, { g_pins[0].rect.x, g_pins[0].rect.y });
+					const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, PinSpot(g_pins[0]));
 					g_pinSettings.anchors[cascade ? 1 : 0] = { fraction.x, fraction.y, true };
 					WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
 				}
 			}
+
+			ApplyEdgeSwitch(params);
 
 			if (!g_pinSettings.free)
 			{
@@ -1660,7 +1890,7 @@ namespace CodexUI
 					for (int k = 0; k < count; ++k)
 					{
 						SetPinFreeAnchor(params, k, at[k]);
-						RequestPinPos(g_pins[k], at[k]);
+						SetPinTarget(g_pins[k], at[k], true);
 						g_pins[k].placePending = false;
 						g_pins[k].applyFree = false;
 					}
@@ -1721,13 +1951,19 @@ namespace CodexUI
 				SetPinFreeAnchor(params, index, at);
 				RequestPinPos(slot, at);
 				CommitPinFreeAnchors();
+
+				// With centering on, pins nobody placed by hand are placed again as
+				// a group, this one included, so the group stays centered.
+				slot.fresh = params.center && !g_pinHandPlaced;
+				if (slot.fresh)
+					g_pinRespawn = true;
 			}
 			else if (slot.applyFree)
 			{
 				slot.applyFree = false;
 				const PinAnchor& saved = g_pinSettings.freeAnchors[index];
 				if (saved.set)
-					RequestPinPos(slot, CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y));
+					SetPinTarget(slot, CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y), true);
 			}
 			else if (!slot.dragging)
 			{
@@ -1741,9 +1977,11 @@ namespace CodexUI
 		// was dropped for the current arrangement.
 		void ArrangePins(IModLoaderImGui* imgui)
 		{
+			ArmPinGlide();
 			if (g_pinSettings.free)
 			{
 				g_pinRespawn = true;
+				g_pinHandPlaced = false;
 				return;
 			}
 
@@ -1781,7 +2019,16 @@ namespace CodexUI
 
 			// Nothing to move yet: changes made while no pin was up are already in effect.
 			if (index == 0)
+			{
 				g_pinModeChanged = g_pinApplyFree = g_pinRespawn = false;
+				if (g_pinSwitchPending)
+					SwitchSpotsWithoutPins();
+			}
+
+			// The pins already up ease aside for it; it takes its spot at once.
+			slot.fresh = true;
+			slot.glide.active = false;
+			ArmPinGlide();
 
 			if (g_pinSettings.free)
 			{
@@ -1813,6 +2060,8 @@ namespace CodexUI
 				g_pins[k].dragging = false;
 				g_pins[k].placePending = g_pins[k + 1].placePending;
 				g_pins[k].placeWait = g_pins[k + 1].placeWait;
+				g_pins[k].fresh = g_pins[k + 1].fresh;
+				g_pins[k].glide.active = false;
 				if (g_pinSettings.free)
 				{
 					// This slot's window moves to the next pin's spot.
@@ -1835,11 +2084,19 @@ namespace CodexUI
 			last.placePending = false;
 			last.placeWait = false;
 			last.applyFree = false;
+			last.fresh = false;
+			last.glide.active = false;
+			ArmPinGlide();
 			if (g_pinSettings.free && count > 1)
 			{
 				// The first pin's spot stays: the next first pin comes back to it.
 				g_pinSettings.freeAnchors[count - 1] = PinAnchor{};
 				CommitPinFreeAnchors();
+
+				// With centering on, the pins left that nobody placed by hand are
+				// placed again as a group.
+				if (g_pinSettings.center && !g_pinHandPlaced)
+					g_pinRespawn = true;
 			}
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
@@ -1857,6 +2114,7 @@ namespace CodexUI
 			if (pressed && imgui->IsWindowHovered(0))
 			{
 				slot.dragging = true;
+				CancelPinGlides();
 				slot.dragFromX = posX;
 				slot.dragFromY = posY;
 				imgui->GetMousePos(&slot.grabX, &slot.grabY);
@@ -1891,6 +2149,7 @@ namespace CodexUI
 					{
 						SetPinFreeAnchor(params, index, { posX, posY });
 						CommitPinFreeAnchors();
+						g_pinHandPlaced = true;
 					}
 					else
 					{
@@ -1923,7 +2182,10 @@ namespace CodexUI
 			// Clicking a pin brings it to the front, in either grouping; a click
 			// never changes a position.
 			if (index == 0)
+			{
+				AdvancePinClock(imgui);
 				UpdatePinGrouping(imgui);
+			}
 
 			// Grouped: only the lead is dragged, and it carries the rest. Ungrouped:
 			// every pin is dragged on its own. A pin that cannot be dragged is
@@ -1948,8 +2210,8 @@ namespace CodexUI
 				// grows, as it does when the Codex opens and the buttons show.
 				const bool edgeAnchored = g_pinSettings.edge == PinEdge::Right &&
 					!g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0].set;
-				if (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
-					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW))
+				if (!g_pinSwitchPending && (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
+					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW)))
 					AnchorLead(imgui, slot);
 				SaveDraggedPin(imgui, 0, slot);
 				PlacePins(imgui, slot);
@@ -1961,6 +2223,10 @@ namespace CodexUI
 				// positions this frame.
 				slot.applyFree = false;
 			}
+
+			// The layout has set this frame's targets: the glides move towards them.
+			if (index == 0)
+				StepPinGlides();
 
 			const bool interactive = CodexUIActive(imgui);
 

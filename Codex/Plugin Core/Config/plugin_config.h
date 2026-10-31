@@ -1,6 +1,19 @@
 #pragma once
 
 #include "plugin_interface.h"
+#include "UI/pin_layout.h"
+
+#include <cstdio>
+#include <cstring>
+
+#include <cstdio>
+#include <cstring>
+
+#include <cstdio>
+#include <cstring>
+
+#include <cstdio>
+#include <cstring>
 
 namespace CodexConfig
 {
@@ -43,9 +56,18 @@ namespace CodexConfig
 		{
 			"Menu",
 			"PinGap",
+			ConfigValueType::Integer,
+			"6",
+			"Space between tiled pinned recipes, in screen pixels",
+			1.0f,
+			50.0f
+		},
+		{
+			"Menu",
+			"PinCentering",
 			ConfigValueType::Boolean,
 			"true",
-			"Leave a gap between tiled pinned recipes; off packs them edge to edge"
+			"Keep the pinned recipes centered along their edge: left to right on Top, top to bottom on Left and Right"
 		},
 		{
 			"Menu",
@@ -203,10 +225,27 @@ namespace CodexConfig
 			return "Tile";
 		}
 
-		// Returns whether tiled pins leave a gap between them.
-		static bool GetPinGap()
+		// Returns the space between tiled pins, in screen pixels (1 to 50). An older
+		// config holds the on/off option here; it is read as its meaning and saved
+		// back as a number so the config page shows it.
+		static int GetPinGap()
 		{
-			return s_self ? s_self->config->ReadBool(s_self, "Menu", "PinGap", true) : true;
+			if (!s_self)
+				return CodexPinLayout::kGapDefault;
+			char text[16] = "";
+			s_self->config->ReadString(s_self, "Menu", "PinGap", text, sizeof(text), "");
+			const int gap = CodexPinLayout::GapFromText(text);
+			char number[16];
+			snprintf(number, sizeof(number), "%d", gap);
+			if (strcmp(text, number) != 0)
+				s_self->config->WriteInt(s_self, "Menu", "PinGap", gap);
+			return gap;
+		}
+
+		// Returns whether the pins are kept centered along their edge.
+		static bool GetPinCentering()
+		{
+			return s_self ? s_self->config->ReadBool(s_self, "Menu", "PinCentering", true) : true;
 		}
 
 		// Returns the current pin grouping ("Grouped" or "Ungrouped").

@@ -11,6 +11,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 namespace CodexPinLayout
 {
@@ -30,6 +32,12 @@ namespace CodexPinLayout
 
 	enum class Edge { Right, Left, Top };
 
+	// The pin spacing option: the gap between tiled windows, in screen pixels.
+	// The default is the loader theme's item spacing.
+	constexpr int kGapMin = 1;
+	constexpr int kGapMax = 50;
+	constexpr int kGapDefault = 6;
+
 	struct Params
 	{
 		float screenW = 0.0f;
@@ -38,7 +46,8 @@ namespace CodexPinLayout
 		float frame = 0.0f; // the theme's frame height; step less frame is the item spacing
 		Edge  edge = Edge::Right;
 		bool  cascade = false;
-		bool  gap = true;   // tiles: leave the item spacing between windows; off packs them edge to edge
+		float gap = 0.0f;   // tiles: the space between windows, in pixels
+		bool  center = false; // keep the group centered along its edge (Arrange, SpawnAll)
 	};
 
 	// A window's top-left corner moved the least that puts all of it on
@@ -135,7 +144,7 @@ namespace CodexPinLayout
 			const float limitA = columns ? p.screenH : p.screenW;
 			const float limitB = columns ? p.screenW : p.screenH;
 			const float margin = p.step;
-			const float gap = p.gap ? p.step - p.frame : 0.0f;
+			const float gap = p.gap;
 
 			auto extentA = [&](int k) { return columns ? sizes[k].h : sizes[k].w; };
 			auto extentB = [&](int k) { return columns ? sizes[k].w : sizes[k].h; };
@@ -217,23 +226,83 @@ namespace CodexPinLayout
 		return pending || std::fabs(placed.x - measured.x) > threshold || std::fabs(placed.y - measured.y) > threshold;
 	}
 
+	namespace detail
+	{
+		// The arrangement for a lead that is already on screen.
+		inline void ArrangeRaw(const Params& p, const Size* sizes, int count, Point lead, Point* out)
+		{
+			out[0] = lead;
+			if (p.cascade)
+				Cascade(p, sizes, count, lead, out);
+			else
+				Tile(p, sizes, count, lead, out);
+			out[0] = lead;
+		}
+
+		// The extent of the windows along the edge: across the screen for Top,
+		// down it for Left and Right.
+		inline void SpanAlongEdge(const Params& p, const Size* sizes, const Point* at, int count, float& lo, float& hi)
+		{
+			const bool alongX = p.edge == Edge::Top;
+			lo = 1.0e30f;
+			hi = -1.0e30f;
+			for (int k = 0; k < count; ++k)
+			{
+				lo = (std::min)(lo, alongX ? at[k].x : at[k].y);
+				hi = (std::max)(hi, alongX ? at[k].x + sizes[k].w : at[k].y + sizes[k].h);
+			}
+		}
+	}
+
+	// The lead's spot with its position along the edge replaced by the one that
+	// centers the whole group on the screen (the arrangement's own wrapping
+	// included); its position across the edge is kept. Horizontal for Top,
+	// vertical for Left and Right.
+	inline Point CenteredLead(const Params& p, const Size* sizes, int count, Point lead)
+	{
+		if (count <= 0)
+			return lead;
+		if (count > kMaxPins)
+			count = kMaxPins;
+
+		const bool alongX = p.edge == Edge::Top;
+		const float limit = alongX ? p.screenW : p.screenH;
+		float& along = alongX ? lead.x : lead.y;
+
+		// From the margin, so a group that fits is not wrapped before it is measured.
+		along = p.step;
+		lead = ClampToScreen(p, sizes[0], lead);
+		Point at[kMaxPins];
+		for (int pass = 0; pass < 3; ++pass)
+		{
+			detail::ArrangeRaw(p, sizes, count, lead, at);
+			float lo = 0.0f, hi = 0.0f;
+			detail::SpanAlongEdge(p, sizes, at, count, lo, hi);
+			const float delta = (limit - (hi - lo)) * 0.5f - lo;
+			if (std::fabs(delta) < 0.5f)
+				break;
+			along += delta;
+			lead = ClampToScreen(p, sizes[0], lead);
+		}
+		along = std::round(along);
+		return ClampToScreen(p, sizes[0], lead);
+	}
+
 	// Positions for `count` windows (at most kMaxPins) in pin order; sizes[0]
 	// and lead are the lead's. The lead is kept on screen; a cascade that would
-	// not fit below it lifts the lead too.
+	// not fit below it lifts the lead too. With p.center the lead's position
+	// along the edge is ignored: the group is centered (CenteredLead).
 	inline void Arrange(const Params& p, const Size* sizes, int count, Point lead, Point* out)
 	{
 		if (count <= 0)
 			return;
-
-		lead = ClampToScreen(p, sizes[0], lead);
 		if (count > kMaxPins)
 			count = kMaxPins;
-		out[0] = lead;
-		if (p.cascade)
-			detail::Cascade(p, sizes, count, lead, out);
-		else
-			detail::Tile(p, sizes, count, lead, out);
-		out[0] = lead;
+
+		lead = ClampToScreen(p, sizes[0], lead);
+		if (p.center)
+			lead = CenteredLead(p, sizes, count, lead);
+		detail::ArrangeRaw(p, sizes, count, lead, out);
 	}
 
 	namespace detail
@@ -246,7 +315,7 @@ namespace CodexPinLayout
 		{
 			if (p.cascade)
 				return { ref.x + (p.edge == Edge::Right ? -p.step : p.step), ref.y + p.step };
-			const float gap = p.gap ? p.step - p.frame : 0.0f;
+			const float gap = p.gap;
 			if (p.edge == Edge::Top)
 				return { ref.x + refSize.w + gap, ref.y };
 			return { p.edge == Edge::Right ? ref.x + refSize.w - size.w : ref.x, ref.y + refSize.h + gap };
@@ -292,7 +361,7 @@ namespace CodexPinLayout
 				return cand;
 		}
 
-		const float gap = p.gap ? p.step - p.frame : 0.0f;
+		const float gap = p.gap;
 		float minX = 1.0e30f, minY = 1.0e30f, maxX = -1.0e30f, maxY = -1.0e30f;
 		for (int k = 0; k < count; ++k)
 		{
@@ -332,12 +401,102 @@ namespace CodexPinLayout
 	}
 
 	// Every pin placed one after the other as if just pinned: the first at the
-	// default spot, the rest by PlaceNew.
+	// default spot, the rest by PlaceNew; with p.center the group is then moved
+	// along the edge to the middle of the screen.
 	inline void SpawnAll(const Params& p, const Size* sizes, int count, Point* out)
 	{
 		if (count > kMaxPins)
 			count = kMaxPins;
 		for (int k = 0; k < count; ++k)
 			out[k] = PlaceNew(p, sizes, out, k, sizes[k]);
+
+		if (!p.center || count <= 0)
+			return;
+		float lo = 0.0f, hi = 0.0f;
+		detail::SpanAlongEdge(p, sizes, out, count, lo, hi);
+		const bool alongX = p.edge == Edge::Top;
+		const float limit = alongX ? p.screenW : p.screenH;
+		if (hi - lo >= limit)
+			return;
+		const float delta = std::round((limit - (hi - lo)) * 0.5f - lo);
+		for (int k = 0; k < count; ++k)
+			(alongX ? out[k].x : out[k].y) += delta;
+	}
+
+	// Switching the PinLayout: where the lead (or a grouped anchor) goes so the
+	// pins land at the closest equivalent of where they were. `from` and `to`
+	// differ in their edge; `to` holds the new settings, its center flag included.
+	//   Right <-> Left: the mirror image, same height and same distance from
+	//     the edge.
+	//   To Top: lined up along the top, centered across the screen.
+	//   From Top: at the new edge's default spot, centered down the screen when
+	//     to.center is on.
+	inline Point SwitchLead(const Params& from, const Params& to, const Size* sizes, int count, Point lead)
+	{
+		if (from.edge == to.edge || count <= 0)
+			return lead;
+
+		if (from.edge != Edge::Top && to.edge != Edge::Top)
+			return ClampToScreen(to, sizes[0], { to.screenW - lead.x - sizes[0].w, lead.y });
+
+		Params centered = to;
+		centered.center = to.edge == Edge::Top || to.center;
+		const Point start = DefaultLead(to, sizes[0]);
+		return centered.center ? CenteredLead(centered, sizes, count, start) : start;
+	}
+
+	// The same for pins that each have a spot of their own (ungrouped): a mirror
+	// moves every pin to its mirror image; a switch to or from Top places the
+	// pins again as if just pinned, centered down or across the screen.
+	inline void SwitchAll(const Params& from, const Params& to, const Size* sizes, int count, Point* at)
+	{
+		if (from.edge == to.edge || count <= 0)
+			return;
+		if (count > kMaxPins)
+			count = kMaxPins;
+
+		if (from.edge != Edge::Top && to.edge != Edge::Top)
+		{
+			for (int k = 0; k < count; ++k)
+				at[k] = ClampToScreen(to, sizes[k], { to.screenW - at[k].x - sizes[k].w, at[k].y });
+			return;
+		}
+
+		Params centered = to;
+		centered.center = to.edge == Edge::Top || to.center;
+		SpawnAll(centered, sizes, count, at);
+	}
+
+	// Pins that move on their own (a pin added or removed, a layout switch,
+	// Clear, Arrange) ease from where they were to their new spot over this
+	// long, in seconds.
+	constexpr float kGlideSeconds = 0.18f;
+
+	// Ease-out: fast at first, settling at the end. 0 at t = 0, 1 at t = 1.
+	inline float EaseOut(float t)
+	{
+		const float u = 1.0f - std::clamp(t, 0.0f, 1.0f);
+		return 1.0f - u * u * u;
+	}
+
+	// Where a window is `elapsed` seconds into a glide from `from` to `to`.
+	inline Point GlideAt(Point from, Point to, float elapsed)
+	{
+		const float e = EaseOut(elapsed / kGlideSeconds);
+		return { from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e };
+	}
+
+	// The spacing option's value from its config text, kept in 1 to 50. The old
+	// on/off option's text keeps its meaning: "true" (a gap) is the default
+	// spacing and "false" (packed) the smallest.
+	inline int GapFromText(const char* text)
+	{
+		if (!text || !text[0] || _stricmp(text, "true") == 0)
+			return kGapDefault;
+		if (_stricmp(text, "false") == 0)
+			return kGapMin;
+		char* end = nullptr;
+		const long value = strtol(text, &end, 10);
+		return end == text ? kGapDefault : static_cast<int>(std::clamp(value, static_cast<long>(kGapMin), static_cast<long>(kGapMax)));
 	}
 }
