@@ -1230,6 +1230,7 @@ namespace CodexUI
 			float             grabX = 0.0f; // where in the window the drag took hold
 			float             grabY = 0.0f;
 			bool              placePending = false; // ungrouped: a new pin waiting for its size to be placed
+			bool              placeWait = false;    // ... and for its window to have been drawn once, so the size is its own
 			bool              applyFree = false;    // ungrouped: put the window at its saved spot
 		};
 
@@ -1610,13 +1611,20 @@ namespace CodexUI
 						if (g_pins[k].rect.valid)
 							SetPinFreeAnchor(params, k, { g_pins[k].rect.x, g_pins[k].rect.y });
 						else
-							g_pins[k].placePending = true;
+							g_pins[k].placePending = g_pins[k].placeWait = true;
 						g_pins[k].applyFree = false;
 					}
 					CommitPinFreeAnchors();
 				}
-				// Ungrouped to grouped: the lead stays where it is and the rest
-				// snap back under it (PlacePins).
+				else if (count > 0 && g_pins[0].rect.valid)
+				{
+					// Ungrouped to grouped: the lead stays where it is, as the
+					// arrangement's anchor, and the rest snap back under it (PlacePins).
+					const bool cascade = g_pinSettings.cascade;
+					const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, { g_pins[0].rect.x, g_pins[0].rect.y });
+					g_pinSettings.anchors[cascade ? 1 : 0] = { fraction.x, fraction.y, true };
+					WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
+				}
 			}
 
 			if (!g_pinSettings.free)
@@ -1679,6 +1687,14 @@ namespace CodexUI
 
 			const CodexPinLayout::Params params = PinLayoutParams(imgui);
 			const CodexPinLayout::Size size{ slot.rect.w, slot.rect.h };
+
+			// A window's first render still measures an empty window (or the last
+			// recipe's): its own size is there from the second.
+			if (slot.placePending && slot.placeWait)
+			{
+				slot.placeWait = false;
+				return;
+			}
 
 			if (slot.placePending)
 			{
@@ -1770,7 +1786,7 @@ namespace CodexUI
 			if (g_pinSettings.free)
 			{
 				// Placed once its window has a size.
-				slot.placePending = true;
+				slot.placePending = slot.placeWait = true;
 				slot.applyFree = false;
 			}
 			else if (index == 0)
@@ -1796,6 +1812,7 @@ namespace CodexUI
 				g_pins[k].rect = g_pins[k + 1].rect;
 				g_pins[k].dragging = false;
 				g_pins[k].placePending = g_pins[k + 1].placePending;
+				g_pins[k].placeWait = g_pins[k + 1].placeWait;
 				if (g_pinSettings.free)
 				{
 					// This slot's window moves to the next pin's spot.
@@ -1816,9 +1833,11 @@ namespace CodexUI
 			last.rect = PinRect{};
 			last.dragging = false;
 			last.placePending = false;
+			last.placeWait = false;
 			last.applyFree = false;
-			if (g_pinSettings.free)
+			if (g_pinSettings.free && count > 1)
 			{
+				// The first pin's spot stays: the next first pin comes back to it.
 				g_pinSettings.freeAnchors[count - 1] = PinAnchor{};
 				CommitPinFreeAnchors();
 			}

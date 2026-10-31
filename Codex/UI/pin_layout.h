@@ -61,7 +61,9 @@ namespace CodexPinLayout
 	// so it survives a resolution change, kept on screen at the new size.
 	inline Point LeadFromFraction(const Params& p, Size size, float fx, float fy)
 	{
-		return ClampToScreen(p, size, { fx * p.screenW, fy * p.screenH });
+		// Rounded: the window is placed on whole pixels, so a spot saved from it
+		// comes back to the same pixel.
+		return ClampToScreen(p, size, { std::round(fx * p.screenW), std::round(fy * p.screenH) });
 	}
 
 	// A window's top-left corner as fractions of the screen, kept inside [0, 1],
@@ -274,9 +276,11 @@ namespace CodexPinLayout
 		if (count <= 0)
 			return DefaultLead(p, size);
 
+		// Each candidate is kept on screen first, as the grouped layout does, so a
+		// window wider than the room beside a pin still finds its spot.
 		for (int k = count - 1; k >= 0; --k)
 		{
-			const Point cand = detail::Beside(p, at[k], sizes[k], size);
+			const Point cand = ClampToScreen(p, size, detail::Beside(p, at[k], sizes[k], size));
 			if (detail::Free(p, sizes, at, count, cand, size))
 				return cand;
 		}
@@ -311,8 +315,11 @@ namespace CodexPinLayout
 			more[moreCount++] = p.edge == Edge::Right ? right : left;
 		}
 		for (int i = 0; i < moreCount; ++i)
+		{
+			more[i] = ClampToScreen(p, size, more[i]);
 			if (detail::Free(p, sizes, at, count, more[i], size))
 				return more[i];
+		}
 
 		return DefaultLead(p, size);
 	}

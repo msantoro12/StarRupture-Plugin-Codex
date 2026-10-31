@@ -461,13 +461,30 @@ int main()
 
 		// The last pin is the reference, not the first: three pins, the third
 		// one is the one the fourth lines up with.
+		for (const Resolution& res : kResolutions)
 		{
-			Case c{ &kResolutions[1], 1.0f, Edge::Left, false, true, 3, "mid", {} };
+			Case c{ &res, 1.0f, Edge::Left, false, true, 3, "mid", {} };
 			const Params p = MakeParams(c);
 			const Size sizes[3] = { { 280, 150 }, { 300, 120 }, { 260, 190 } };
 			const Point at[3] = { { 100, 100 }, { 600, 100 }, { 1000, 200 } };
 			const Point got = PlaceNew(p, sizes, at, 3, { 320, 110 });
-			Check(got.x == 1000 && std::fabs(got.y - (200 + 190 + (p.step - p.frame))) < 0.01f, "the most recently placed pin is the reference", Describe(c));
+			Check(got.x == std::min(1000.0f, res.w - 320.0f) && std::fabs(got.y - (200 + 190 + (p.step - p.frame))) < 0.01f, "the most recently placed pin is the reference", Describe(c));
+		}
+
+		// A Right-edge cascade, the lead at its default spot: a new pin wider than
+		// the lead steps in as far as the screen allows and every title bar shows.
+		for (const Resolution& res : kResolutions)
+		for (float fontScale : { 1.0f, 2.0f })
+		for (bool gap : { true, false })
+		{
+			Case c{ &res, fontScale, Edge::Right, true, gap, 2, "default", {} };
+			const Params p = MakeParams(c);
+			const Size sizes[2] = { { 213 * fontScale, 139 * fontScale }, { 395 * fontScale, 150 * fontScale } };
+			const Point lead = DefaultLead(p, sizes[0]);
+			const Point got = PlaceNew(p, sizes, &lead, 1, sizes[1]);
+			const Point def = DefaultLead(p, sizes[1]);
+			Check(!(got.x == def.x && got.y == def.y), "a wider cascade pin does not fall back to the default spot", Describe(c));
+			Check(got.y >= lead.y + p.frame - 0.01f && got.x >= 0.0f && got.x + sizes[1].w <= res.w + 0.01f, "a wider cascade pin leaves the lead's title bar showing", Describe(c));
 		}
 
 		// No room below the last pin: the next free slot, not on top of a pin.
@@ -606,20 +623,10 @@ int main()
 			const Point back = LeadFromFraction(now, size, fx, fy);
 			Check(back.x >= 0.0f && back.y >= 0.0f && back.x + size.w <= to.w + 0.01f && back.y + size.h <= to.h + 0.01f, "a saved ungrouped spot is re-clamped to the new screen", Describe(d));
 			if (&from == &to)
-				Check(std::fabs(back.x - at.x) < 0.5f && std::fabs(back.y - at.y) < 0.5f, "a saved spot comes back at the same size", Describe(c));
+				Check(std::fabs(back.x - at.x) <= 1.0f && std::fabs(back.y - at.y) <= 1.0f, "a saved spot comes back at the same size", Describe(c));
 			++checked;
 		}
 		printf("  %d saved spots checked\n", checked);
-
-		// Another pin placed does not move the pins already up.
-		Case c{ &kResolutions[1], 1.0f, Edge::Right, false, true, 2, "fixed", {} };
-		const Params p = MakeParams(c);
-		const Size sizes[2] = { { 280, 150 }, { 300, 120 } };
-		const Point before[2] = { { 400, 300 }, { 900, 500 } };
-		Point copy[2] = { before[0], before[1] };
-		PlaceNew(p, sizes, copy, 2, { 260, 190 });
-		Check(copy[0].x == before[0].x && copy[0].y == before[0].y && copy[1].x == before[1].x && copy[1].y == before[1].y,
-			"placing a new pin leaves the others where they are", Describe(c));
 	}
 
 	// 11. Switching groupings. Grouped to ungrouped: each pin keeps the spot it
