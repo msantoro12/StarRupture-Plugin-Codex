@@ -1227,6 +1227,8 @@ namespace CodexUI
 			bool              dragging = false;
 			float             dragFromX = 0.0f;
 			float             dragFromY = 0.0f;
+			float             grabX = 0.0f; // where in the window the drag took hold
+			float             grabY = 0.0f;
 		};
 
 		PinSlot  g_pins[kMaxPins];
@@ -1542,6 +1544,8 @@ namespace CodexUI
 		void UnpinSlot(int index)
 		{
 			const int count = PinCount();
+			if (index >= count)
+				return;
 			for (int k = index; k + 1 < count; ++k)
 			{
 				CodexRecipes::RecipeInfo info;
@@ -1577,6 +1581,24 @@ namespace CodexUI
 				slot.dragging = true;
 				slot.dragFromX = posX;
 				slot.dragFromY = posY;
+				imgui->GetMousePos(&slot.grabX, &slot.grabY);
+				slot.grabX -= posX;
+				slot.grabY -= posY;
+			}
+			else if (slot.dragging && imgui->IsMouseDown(0))
+			{
+				// ImGui moves a dragged window to the mouse before Begin, so past an
+				// edge it would flick off screen and back on alternate frames. Ask for
+				// the clamped spot every frame instead; the request is applied in Begin.
+				float mouseX = 0.0f, mouseY = 0.0f;
+				imgui->GetMousePos(&mouseX, &mouseY);
+				const CodexPinLayout::Point at = CodexPinLayout::ClampToScreen(PinLayoutParams(imgui),
+					{ slot.rect.w, slot.rect.h }, { mouseX - slot.grabX, mouseY - slot.grabY });
+				slot.hints.pivot_x = 0.0f;
+				slot.hints.pivot_y = 0.0f;
+				slot.hints.pos_cond = 0;
+				slot.hints.pos_x = at.x;
+				slot.hints.pos_y = at.y;
 			}
 			else if (slot.dragging && imgui->IsMouseReleased(0))
 			{
@@ -1631,7 +1653,8 @@ namespace CodexUI
 			{
 				// Only the lead is moved by hand; the rest follow it, and the lead
 				// has already asked for their positions this frame.
-				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove;
+				// Not raised by a click either: the windows keep the order they were created in.
+				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove | kWindowFlagsNoBringToFrontOnFocus;
 			}
 
 			const bool interactive = CodexUIActive(imgui);

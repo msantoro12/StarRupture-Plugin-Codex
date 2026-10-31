@@ -113,7 +113,25 @@ namespace
 		Check(inside, "every pin fully on screen", where);
 
 		const Point want = ClampToScreen(p, sizes[0], c.lead);
-		Check(at[0].x == want.x && at[0].y == want.y, "lead stays where it was put", where);
+		if (c.cascade)
+		{
+			// A cascade that does not fit below the lead lifts it, never lowers it.
+			Check(at[0].x == want.x && at[0].y <= want.y, "cascade lead only moves up", where);
+
+			// Every title bar shows whenever the stack fits on the screen at all.
+			float fitH = 0.0f;
+			for (int k = 0; k < c.count; ++k)
+				fitH = (std::max)(fitH, sizes[k].h + p.step * static_cast<float>(k));
+			if (fitH <= p.screenH)
+			{
+				bool shown = true;
+				for (int k = 0; k + 1 < c.count; ++k)
+					shown = shown && at[k + 1].y >= at[k].y + p.frame - 0.01f;
+				Check(shown, "no cascade title bar is covered when the stack fits", where);
+			}
+		}
+		else
+			Check(at[0].x == want.x && at[0].y == want.y, "lead stays where it was put", where);
 	}
 }
 
@@ -290,6 +308,58 @@ int main()
 		for (const Point& pt : at)
 			fine = fine && std::isfinite(pt.x) && std::isfinite(pt.y) && pt.x >= 0.0f && pt.y >= 0.0f;
 		Check(fine && at[0].x == 0.0f && at[0].y == 0.0f, "an oversize lead sits at the corner", Describe(c));
+	}
+
+	// 7. Mixed widths: a line is judged by its widest window, not its first, so
+	//    a wide pin late in a line does not get pushed back over the lead.
+	printf("mixed widths\n");
+	{
+		struct Repro { const Resolution* res; Edge edge; bool gap; Point lead; Size sizes[3]; };
+		const Resolution r3440{ "3440x1440", 3440, 1440 };
+		const Resolution r2560{ "2560x1440", 2560, 1440 };
+		const Repro repros[] = {
+			{ &r3440, Edge::Right, false, { 567, 796 }, { { 362, 446 }, { 508, 378 }, { 902, 392 } } },
+			{ &r2560, Edge::Top, true, { 1039, 709 }, { { 928, 272 }, { 948, 244 }, { 376, 306 } } },
+		};
+		for (const Repro& r : repros)
+		{
+			Case c{ r.res, 2.0f, r.edge, false, r.gap, 3, "repro", r.lead };
+			const Params p = MakeParams(c);
+			Point at[3];
+			Arrange(p, r.sizes, 3, r.lead, at);
+			Check(Overlaps(r.sizes, at, 3) == 0, "mixed-width tiles do not overlap", Describe(c));
+		}
+
+		// A repeatable spread of pin sizes, lead spots, edges and gaps.
+		unsigned seed = 12345u;
+		auto next = [&seed](float lo, float hi) {
+			seed = seed * 1664525u + 1013904223u;
+			return lo + (hi - lo) * static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f;
+		};
+		int fuzzed = 0;
+		for (const Resolution& res : kResolutions)
+		for (int round = 0; round < 400; ++round)
+		{
+			const float fontScale = round % 2 ? 2.0f : 1.0f;
+			const int count = 1 + round % kMaxPins;
+			Size sizes[kMaxPins];
+			float area = 0.0f;
+			for (int k = 0; k < count; ++k)
+			{
+				sizes[k] = { next(120.0f, 950.0f), next(100.0f, 450.0f) };
+				area += sizes[k].w * sizes[k].h;
+			}
+			Case c{ &res, fontScale, static_cast<Edge>(round % 3), round % 5 == 4, round % 2 == 0, count, "random", {} };
+			const Params p = MakeParams(c);
+			c.lead = { next(0.0f, res.w), next(0.0f, res.h) };
+			Point at[kMaxPins];
+			Arrange(p, sizes, count, c.lead, at);
+			CheckOnScreen(c, p, sizes, at);
+			if (!c.cascade && area < 0.2f * res.w * res.h)
+				Check(Overlaps(sizes, at, count) == 0, "random tiles do not overlap when the screen has room", Describe(c));
+			++fuzzed;
+		}
+		printf("  %d random layouts checked\n", fuzzed);
 	}
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);

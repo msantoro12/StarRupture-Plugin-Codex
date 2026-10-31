@@ -78,7 +78,7 @@ namespace CodexPinLayout
 			return reach;
 		}
 
-		inline void Cascade(const Params& p, const Size* sizes, int count, Point lead, Point* out)
+		inline void Cascade(const Params& p, const Size* sizes, int count, Point& lead, Point* out)
 		{
 			float w[kMaxPins], h[kMaxPins];
 			for (int k = 0; k < count; ++k)
@@ -94,6 +94,13 @@ namespace CodexPinLayout
 			const float reachOther = CascadeReach(w, count, lead.x, p.screenW, -prefer);
 			const float sx = reachPreferred >= p.step || reachPreferred >= reachOther ? prefer : -prefer;
 			const float stepX = std::clamp(sx == prefer ? reachPreferred : reachOther, 0.0f, p.step);
+
+			// When the stack does not fit below the lead, the whole cascade, lead
+			// included, moves up by the shortfall so every title bar stays showing.
+			float fitH = 0.0f;
+			for (int k = 0; k < count; ++k)
+				fitH = (std::max)(fitH, h[k] + p.step * static_cast<float>(k));
+			lead.y = (std::max)(0.0f, (std::min)(lead.y, p.screenH - fitH));
 
 			// Downwards only: a later pin sits in front of the earlier ones, so
 			// stepping up would hide their title bars. Closer steps when the
@@ -140,7 +147,14 @@ namespace CodexPinLayout
 					hi = (std::max)(hi, lineHi);
 
 					const float prefer = dir != 0.0f ? dir : (p.edge == Edge::Right ? -1.0f : 1.0f);
-					const float need = extentB(k) + gap;
+					// The whole line's width decides which side has room for it.
+					float lineExtent = 0.0f, along = margin;
+					for (int j = k; j < count && (j == k || along + extentA(j) <= limitA - margin); ++j)
+					{
+						lineExtent = (std::max)(lineExtent, extentB(j));
+						along += extentA(j) + gap;
+					}
+					const float need = lineExtent + gap;
 					const float roomPrefer = prefer < 0.0f ? lo : limitB - hi;
 					const float roomOther = prefer < 0.0f ? limitB - hi : lo;
 					dir = roomPrefer >= need || roomPrefer >= roomOther ? prefer : -prefer;
@@ -166,7 +180,8 @@ namespace CodexPinLayout
 	}
 
 	// Positions for `count` windows (at most kMaxPins) in pin order; sizes[0]
-	// and lead are the lead's. The lead's own result is `lead` kept on screen.
+	// and lead are the lead's. The lead is kept on screen; a cascade that would
+	// not fit below it lifts the lead too.
 	inline void Arrange(const Params& p, const Size* sizes, int count, Point lead, Point* out)
 	{
 		if (count <= 0)
