@@ -48,11 +48,20 @@ loader the plugin shows "Needs loader" and stays off.
   item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
   address with `{item}`, `{name}` or `{game}`.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
-  from the mod loader's config page or config file.
+  from the mod loader's config page or config file. `Planner` and `PinArrangement` are
+  dropdowns there.
 
 ## Configuration
 
-Settings are written to the plugin's config file on first run and can be edited there:
+Settings are written to the plugin's config file on first run and can be edited there.
+On the mod loader's config page, `Planner` and `PinArrangement` are dropdowns. The search
+box and pin positions have no field: the **Saved state** row at the end of the `Menu`
+section has a **Clear** button that puts the search box back in the centre and the pins back
+on their edge at once, even with the search box open. Values already in your config file
+keep working, and choices match ignoring case. The dropdowns and the hidden entries need a
+loader that has the Choice and Hidden config types (v71); on an older one the page shows
+them as plain text fields.
+
 
 | Section | Key | Default | Description |
 | --- | --- | --- | --- |
@@ -60,14 +69,14 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` |
-| `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` |
+| `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
 | `Menu` | `PinGap` | `true` | Leave a gap between tiled pins; off packs them edge to edge |
-| `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box |
-| `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box |
-| `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` |
+| `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
+| `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
+| `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` (dropdown) |
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
-| `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it; clear it to reset |
-| `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it; clear it to reset |
+| `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
+| `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 
 ---
 

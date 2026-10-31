@@ -12,3 +12,5 @@ The recipe window's redundant Close button is gone (use the X or Esc)
 Launch planner opens the StarRupture Planner's add-item link, adding the recipe's output at one machine's output
 Launch planner can open starruptureplanner.com or starrupturecalc.com at the item, or the starrupture-planner.com planner page (option Planner)
 CustomUrlTemplate also takes {name} (the item's display name) and {game} (the game's internal item name) next to {item}
+Planner and PinArrangement are now dropdowns on the mod loader's config page
+The search box and pin positions are no longer config fields; a Saved state row with a Clear button puts them back at once
