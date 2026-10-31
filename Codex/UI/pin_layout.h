@@ -5,7 +5,7 @@
 // gap: no ImGui, no game, so it can be tested on its own.
 //
 // Grouped (the default): the first pin is the lead and the only one the
-// player moves; the rest tile or cascade under it. Ungrouped: every pin has
+// player drags; the rest tile or cascade under it. Ungrouped: every pin has
 // its own spot, and a new pin is placed by PlaceNew. Every window stays fully
 // on screen.
 
@@ -197,6 +197,13 @@ namespace CodexPinLayout
 				++inLine;
 			}
 		}
+	}
+
+	// Whether the player can drag pin `index` by hand. Grouped: only the first
+	// pin, the lead, which carries the rest. Ungrouped: every pin, on its own.
+	inline bool CanDrag(bool ungrouped, int index)
+	{
+		return ungrouped || index == 0;
 	}
 
 	// Whether the lead's placement has to be requested this frame. A request

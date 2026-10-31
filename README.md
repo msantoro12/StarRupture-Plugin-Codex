@@ -36,7 +36,7 @@ loader the plugin shows "Needs loader" and stays off.
   pin and the others follow it; the move cursor shows where it can be grabbed while the Codex
   or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
   Cascade each remember where you dropped the first pin, across sessions. Only the first pin
-  moves by hand: if you unpin it, the next oldest becomes the first and takes its place. The
+  can be dragged; pressing and dragging any other pin moves nothing. If you unpin it, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
   and puts the pins back on the edge. Clicking a pin brings it to the front without moving
   anything. Set `PinGrouping` to `Ungrouped` and every pin is moved by hand on its own,
@@ -79,7 +79,7 @@ them as plain text fields.
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
-| `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` or `Ungrouped` (dropdown) |
+| `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` (only the first pin is dragged, and the rest follow it) or `Ungrouped` (every pin is dragged on its own) (dropdown) |
 | `Menu` | `PinGap` | `true` | Leave a gap between tiled pins; off packs them edge to edge |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |

@@ -1853,7 +1853,8 @@ namespace CodexUI
 			float posX = 0.0f, posY = 0.0f;
 			imgui->GetWindowPos(&posX, &posY);
 
-			if (imgui->IsMouseClicked(0, false) && imgui->IsWindowHovered(0))
+			const bool pressed = imgui->IsMouseClicked(0, false);
+			if (pressed && imgui->IsWindowHovered(0))
 			{
 				slot.dragging = true;
 				slot.dragFromX = posX;
@@ -1862,7 +1863,7 @@ namespace CodexUI
 				slot.grabX -= posX;
 				slot.grabY -= posY;
 			}
-			else if (slot.dragging && imgui->IsMouseDown(0))
+			else if (slot.dragging && imgui->IsMouseDown(0) && !pressed)
 			{
 				// ImGui moves a dragged window to the mouse before Begin, so past an
 				// edge it would flick off screen and back on alternate frames. Ask for
@@ -1877,8 +1878,10 @@ namespace CodexUI
 				slot.hints.pos_x = at.x;
 				slot.hints.pos_y = at.y;
 			}
-			else if (slot.dragging && imgui->IsMouseReleased(0))
+			else if (slot.dragging)
 			{
+				// The button is up, or a new press began elsewhere: either way this
+				// drag is over, and only a press on this window starts another.
 				slot.dragging = false;
 				if (std::fabs(posX - slot.dragFromX) > kPinDragThreshold || std::fabs(posY - slot.dragFromY) > kPinDragThreshold)
 				{
@@ -1922,17 +1925,23 @@ namespace CodexUI
 			if (index == 0)
 				UpdatePinGrouping(imgui);
 
+			// Grouped: only the lead is dragged, and it carries the rest. Ungrouped:
+			// every pin is dragged on its own. A pin that cannot be dragged is
+			// NoMove, shows no move cursor and never starts a drag.
+			const bool canDrag = CodexPinLayout::CanDrag(g_pinSettings.free, index);
+			slot.hints.extra_window_flags = canDrag ? kPinWindowFlags : kPinWindowFlags | PluginWindowFlags_NoMove;
+			if (!canDrag)
+				slot.dragging = false;
+
 			if (g_pinSettings.free)
 			{
 				// Every pin is moved by hand and never moves another.
-				slot.hints.extra_window_flags = kPinWindowFlags;
 				PlaceFreePin(imgui, index, slot);
 				SaveDraggedPin(imgui, index, slot);
 				ShowDragCursor(imgui);
 			}
-			else if (index == 0)
+			else if (canDrag)
 			{
-				slot.hints.extra_window_flags = kPinWindowFlags;
 				slot.applyFree = false;
 
 				// On the Right edge the lead keeps its right edge when its window
@@ -1948,9 +1957,8 @@ namespace CodexUI
 			}
 			else
 			{
-				// Only the lead is moved by hand; the rest follow it, and the lead
-				// has already asked for their positions this frame.
-				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove;
+				// The rest follow the lead, which has already asked for their
+				// positions this frame.
 				slot.applyFree = false;
 			}
 

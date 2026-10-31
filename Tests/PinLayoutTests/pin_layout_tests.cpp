@@ -685,6 +685,20 @@ int main()
 		printf("  %d switches checked\n", switched);
 	}
 
+	// 12. Which pins can be dragged. Grouped: only the first, the lead.
+	//     Ungrouped: every pin.
+	printf("drag eligibility\n");
+	{
+		for (int index = 0; index < kMaxPins; ++index)
+		{
+			char what[64];
+			snprintf(what, sizeof(what), "pin %d", index);
+			Check(CanDrag(false, index) == (index == 0), "grouped: only the first pin is dragged", what);
+			Check(CanDrag(true, index), "ungrouped: every pin is dragged", what);
+		}
+		printf("  %d pins checked\n", kMaxPins);
+	}
+
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
 }
