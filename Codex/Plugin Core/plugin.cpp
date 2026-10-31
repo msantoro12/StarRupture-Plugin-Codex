@@ -16,6 +16,7 @@ IPluginSelf* GetSelf() { return g_self; }
 static void OnEngineTick(float /*deltaSeconds*/)
 {
 	CodexIcons::Tick();
+	CodexUI::Tick();
 }
 
 // Fires once a save is fully loaded into the world — (re)scans the recipe

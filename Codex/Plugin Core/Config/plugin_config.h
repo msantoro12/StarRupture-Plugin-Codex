@@ -103,6 +103,13 @@ namespace CodexConfig
 			"Where each pinned recipe was last placed while ungrouped, as screen-fraction \"x,y\" pairs separated by \";\", in pin order (empty = not placed)"
 		},
 		{
+			"Menu",
+			"PinnedRecipes",
+			ConfigValueType::Hidden,
+			"",
+			"The pinned recipes, as their asset names separated by \";\", in pin order; they are pinned again when the game starts (empty = none)"
+		},
+		{
 			"Planner",
 			"Planner",
 			ConfigValueType::Choice,
@@ -253,6 +260,20 @@ namespace CodexConfig
 		{
 			if (s_self)
 				s_self->config->WriteString(s_self, "Menu", "PinFreeOffsets", offsets);
+		}
+
+		// The pinned recipes' keys (asset names) joined with ";" in pin order, kept so the
+		// pins come back at the next start; empty means none saved.
+		static void GetPinnedRecipes(char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinnedRecipes", out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinnedRecipes(const char* keys)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinnedRecipes", keys);
 		}
 
 		// Saved position of the first pin for the tile or cascade arrangement: an "x,y"

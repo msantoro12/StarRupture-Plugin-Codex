@@ -2,6 +2,7 @@
 // screen size, the window sizes, the lead position, the arrangement and the
 // gap (Codex/UI/pin_layout.h), so no game and no ImGui are needed.
 #include "UI/pin_layout.h"
+#include "UI/pin_set.h"
 
 #include <cmath>
 #include <cstdio>
@@ -1023,6 +1024,44 @@ int main()
 		printf("  %d drags checked\n", dragged);
 	}
 	RunCenteringTests();
+
+	// 13. The saved pin set: keys joined with ";" in pin order, read back the
+	//     same, and read safely from a hand-edited or damaged value.
+	printf("saved pin set\n");
+	{
+		using Keys = std::vector<std::string>;
+		const Keys three = { "CR_IronPlate", "CR_CopperWire", "CR_Aerogel" };
+
+		Check(CodexPinSet::Format({}, 1023).empty(), "no pins save as empty text", "empty");
+		Check(CodexPinSet::Parse("", kMaxPins).empty(), "empty text reads as no pins", "empty");
+		Check(CodexPinSet::Parse(nullptr, kMaxPins).empty(), "a missing value reads as no pins", "null");
+
+		Check(CodexPinSet::Format(three, 1023) == "CR_IronPlate;CR_CopperWire;CR_Aerogel", "keys are joined in pin order", "three");
+		Check(CodexPinSet::Parse(CodexPinSet::Format(three, 1023).c_str(), kMaxPins) == three, "saved pins read back in the same order", "three");
+
+		// Every count from one pin up to the limit survives a round trip, in order.
+		for (int count = 1; count <= kMaxPins; ++count)
+		{
+			Keys keys;
+			for (int k = 0; k < count; ++k)
+				keys.push_back("CR_Recipe" + std::to_string(k * 7 + 1));
+			char what[64];
+			snprintf(what, sizeof(what), "%d pins", count);
+			Check(CodexPinSet::Parse(CodexPinSet::Format(keys, 1023).c_str(), kMaxPins) == keys, "round trip", what);
+		}
+
+		// A hand-edited value: blanks, spaces and repeats are dropped, order kept.
+		Check(CodexPinSet::Parse(" CR_A ;;CR_B;CR_A; ;CR_C", kMaxPins) == Keys({ "CR_A", "CR_B", "CR_C" }),
+			"blank entries, spaces and repeats are dropped", "hand edited");
+		Check(CodexPinSet::Parse("CR_A;CR_B;CR_C;CR_D", 2) == Keys({ "CR_A", "CR_B" }),
+			"no more pins are read than there are slots", "limit");
+
+		// A key that cannot be read back is not saved, nor is one that does not fit.
+		Check(CodexPinSet::Format({ "CR_A", "", "CR_B;CR_X", "CR_C" }, 1023) == "CR_A;CR_C", "empty and ';' keys are skipped", "bad keys");
+		Check(CodexPinSet::Format(three, 20) == "CR_IronPlate", "keys that do not fit are left off with all that follow", "too long");
+		Check(CodexPinSet::Format(three, 12) == "CR_IronPlate", "a key that exactly fits is kept", "exact");
+		Check(CodexPinSet::Format(three, 11).empty(), "nothing is cut in half", "short");
+	}
 
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;

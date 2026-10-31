@@ -5,11 +5,13 @@
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
 #include "UI/pin_layout.h"
+#include "UI/pin_set.h"
 
 #include "Engine_classes.hpp"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -38,6 +40,13 @@ namespace CodexUI
 		WidgetHandle      g_closerWidget = nullptr;
 		PluginWindowHints g_closerHints{};
 		PluginWidgetDesc  g_closerDesc{};
+
+		// Saved pins, put back once the recipe list is ready (see
+		// RestorePinnedRecipes). Waiting is set by Init and cleared by Tick,
+		// which runs on the game thread; Render is set by Tick and cleared by
+		// the closer widget, so the pins are made on the render thread.
+		std::atomic<bool> g_restoreWaiting{ false };
+		std::atomic<bool> g_restoreRender{ false };
 
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
@@ -124,7 +133,8 @@ namespace CodexUI
 		void CloseDetail();
 		void OnDetailPanelClosed(PanelHandle handle);
 		void PlaceSearchBox(float fontScale);
-		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe);
+		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe, bool restoring = false);
+		void RestorePinnedRecipes(IModLoaderImGui* imgui);
 		void ArrangePins(IModLoaderImGui* imgui);
 		bool IsPinned(void* nativeRecipe);
 		bool HasFreePinSlot();
@@ -299,10 +309,12 @@ namespace CodexUI
 				CloseDetailNow();
 		}
 
-		void RenderCloserWidget(IModLoaderImGui* /*imgui*/)
+		void RenderCloserWidget(IModLoaderImGui* imgui)
 		{
 			if (g_self && g_self->hooks->UI && g_closerWidget)
 				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
+			if (g_restoreRender.exchange(false))
+				RestorePinnedRecipes(imgui);
 			CloseDetailNow();
 		}
 
@@ -1231,6 +1243,7 @@ namespace CodexUI
 		struct PinSlot
 		{
 			void*             nativeRecipe = nullptr;
+			std::string       recipeKey; // the recipe's asset name, as saved between sessions
 			WidgetHandle      widget = nullptr;
 			PluginWidgetDesc  desc{};
 			PluginWindowHints hints{};
@@ -1246,6 +1259,7 @@ namespace CodexUI
 			bool              applyFree = false;    // ungrouped: put the window at its saved spot
 			PinGlide          glide;                // easing to a new spot on its own
 			bool              fresh = false;        // just pinned: its first spot is taken at once, not eased to
+			bool              restoring = false;    // ungrouped: a saved pin, back at its saved spot rather than a new pin's
 		};
 
 		PinSlot  g_pins[kMaxPins];
@@ -1330,6 +1344,10 @@ namespace CodexUI
 
 		// All the ungrouped entries, joined with ";".
 		constexpr int kPinFreeOffsetsBufferSize = kPinOffsetBufferSize * kMaxPins;
+
+		// The pinned recipes' keys, joined with ";". The config holds a value of
+		// up to this many characters, and eight asset names take about a third.
+		constexpr int kPinnedRecipesBufferSize = 1024;
 
 		// A drop that moves the window less than this is a click, not a drag.
 		constexpr float kPinDragThreshold = 0.5f;
@@ -1567,6 +1585,18 @@ namespace CodexUI
 			while (count < kMaxPins && g_pins[count].nativeRecipe)
 				++count;
 			return count;
+		}
+
+		// Saves which recipes are pinned, in pin order. Called when the set
+		// changes (a pin, an unpin), never per frame. A Clear on the config page
+		// empties the saved copy and leaves the pins that are up.
+		void CommitPinnedRecipes()
+		{
+			std::vector<std::string> keys;
+			const int count = PinCount();
+			for (int k = 0; k < count; ++k)
+				keys.push_back(g_pins[k].recipeKey);
+			CodexConfig::Config::SetPinnedRecipes(CodexPinSet::Format(keys, kPinnedRecipesBufferSize - 1).c_str());
 		}
 
 		CodexPinLayout::Params PinLayoutParams(IModLoaderImGui* imgui)
@@ -1951,6 +1981,17 @@ namespace CodexUI
 				slot.applyFree = false;
 				CodexPinLayout::Point at;
 				const PinAnchor& saved = g_pinSettings.freeAnchors[index];
+				if (slot.restoring)
+				{
+					// A saved pin goes back to the spot it was left at, which is
+					// already saved.
+					slot.restoring = false;
+					if (saved.set)
+					{
+						RequestPinPos(slot, CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y));
+						return;
+					}
+				}
 				if (index == 0)
 				{
 					at = saved.set ? CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y)
@@ -2019,7 +2060,10 @@ namespace CodexUI
 			snprintf(g_pins[index].title, sizeof(g_pins[index].title), "%s###CodexPin%d", displayName, index);
 		}
 
-		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe)
+		// Pins a recipe in the next free slot. `restoring` is a pin coming back
+		// from the saved set: it is not saved again, and ungrouped it returns to
+		// its saved spot.
+		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe, bool restoring)
 		{
 			if (!nativeRecipe || IsPinned(nativeRecipe))
 				return;
@@ -2034,6 +2078,8 @@ namespace CodexUI
 
 			PinSlot& slot = g_pins[index];
 			slot.nativeRecipe = nativeRecipe;
+			slot.recipeKey = info.key;
+			slot.restoring = restoring;
 			TitleSlot(index, info.displayName.c_str());
 
 			// Nothing to move yet: changes made while no pin was up are already in effect.
@@ -2060,6 +2106,58 @@ namespace CodexUI
 
 			if (g_self && g_self->hooks->UI)
 				g_self->hooks->UI->SetWidgetVisible(slot.widget, true);
+
+			if (!restoring)
+				CommitPinnedRecipes();
+		}
+
+		// Puts the saved pins back, once the recipe list is ready. A saved recipe
+		// the game no longer has is dropped with a log line, and the pins after it
+		// move up a slot with their saved spots, as when one is unpinned.
+		void RestorePinnedRecipes(IModLoaderImGui* imgui)
+		{
+			char text[kPinnedRecipesBufferSize];
+			CodexConfig::Config::GetPinnedRecipes(text, sizeof(text));
+			const std::vector<std::string> keys = CodexPinSet::Parse(text, kMaxPins);
+			if (keys.empty() || AnyPinned())
+				return;
+
+			PinAnchor savedSpots[kMaxPins];
+			for (int k = 0; k < kMaxPins; ++k)
+				savedSpots[k] = g_pinSettings.freeAnchors[k];
+
+			int restored = 0;
+			for (size_t i = 0; i < keys.size(); ++i)
+			{
+				CodexRecipes::RecipeInfo info;
+				if (!CodexRecipes::FindByKey(keys[i], info))
+				{
+					LOG_INFO("CodexUI: saved pin '%s' is no longer a recipe; dropped.", keys[i].c_str());
+					continue;
+				}
+
+				PinRecipe(imgui, info.nativeRecipe, true);
+				if (PinCount() == restored)
+					continue;
+				g_pinSettings.freeAnchors[restored] = savedSpots[i];
+				++restored;
+			}
+
+			const int saved = static_cast<int>(keys.size());
+			LOG_INFO("CodexUI: restored %d of %d saved pin(s).", restored, saved);
+
+			if (restored < saved)
+			{
+				// The saved copies match what is up again.
+				if (g_pinSettings.free)
+				{
+					// Slot 0's spot stays for the next first pin, as in UnpinSlot.
+					for (int k = restored > 1 ? restored : 1; k < saved; ++k)
+						g_pinSettings.freeAnchors[k] = PinAnchor{};
+					CommitPinFreeAnchors();
+				}
+				CommitPinnedRecipes();
+			}
 		}
 
 		// Unpins a slot and closes the gap: each later pin moves up a slot, so
@@ -2075,6 +2173,7 @@ namespace CodexUI
 			{
 				CodexRecipes::RecipeInfo info;
 				g_pins[k].nativeRecipe = g_pins[k + 1].nativeRecipe;
+				g_pins[k].recipeKey = g_pins[k + 1].recipeKey;
 				g_pins[k].rect = g_pins[k + 1].rect;
 				g_pins[k].dragging = false;
 				g_pins[k].placePending = g_pins[k + 1].placePending;
@@ -2098,6 +2197,8 @@ namespace CodexUI
 
 			PinSlot& last = g_pins[count - 1];
 			last.nativeRecipe = nullptr;
+			last.recipeKey.clear();
+			last.restoring = false;
 			last.rect = PinRect{};
 			last.dragging = false;
 			last.placePending = false;
@@ -2119,6 +2220,7 @@ namespace CodexUI
 			}
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
+			CommitPinnedRecipes();
 		}
 
 		// Follows a drag of a pin's window and, once, when a drag that moved it
@@ -2382,6 +2484,7 @@ namespace CodexUI
 			for (PinSlot& slot : g_pins)
 			{
 				slot.nativeRecipe = nullptr;
+				slot.recipeKey.clear();
 				if (slot.widget)
 				{
 					self->hooks->UI->UnregisterWidget(slot.widget);
@@ -2453,6 +2556,7 @@ namespace CodexUI
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 		LoadPinSettings();
 		RegisterPinSlots(self);
+		g_restoreWaiting = true;
 		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 
 		if (self->hooks->Input)
@@ -2469,8 +2573,24 @@ namespace CodexUI
 		LOG_INFO("CodexUI: search, detail and pin windows registered");
 	}
 
+	void Tick()
+	{
+		if (!g_restoreWaiting || !CodexRecipes::IsReady())
+			return;
+
+		// The recipes are known, so the saved pins can be made. That takes the
+		// render thread, which the closer widget gives.
+		g_restoreWaiting = false;
+		g_restoreRender = true;
+		if (g_self && g_self->hooks->UI && g_closerWidget)
+			g_self->hooks->UI->SetWidgetVisible(g_closerWidget, true);
+	}
+
 	void Shutdown(IPluginSelf* self)
 	{
+		g_restoreWaiting = false;
+		g_restoreRender = false;
+
 		if (!self->hooks->UI)
 		{
 			g_self = nullptr;

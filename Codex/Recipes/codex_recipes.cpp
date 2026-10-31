@@ -529,6 +529,7 @@ namespace CodexRecipes
 			}
 
 			info.nativeRecipe     = static_cast<void*>(recipe);
+			info.key              = recipeName;
 			info.buildTimeSeconds = recipe->BuildTime;
 
 			SDK::FAuSimpleItem outputItem;
@@ -931,6 +932,23 @@ namespace CodexRecipes
 		for (const RecipeInfo& recipe : g_recipes)
 		{
 			if (recipe.nativeRecipe == nativeRecipe)
+			{
+				outRecipe = recipe;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool FindByKey(const std::string& key, RecipeInfo& outRecipe)
+	{
+		if (key.empty())
+			return false;
+
+		std::lock_guard<std::mutex> lock(g_mutex);
+		for (const RecipeInfo& recipe : g_recipes)
+		{
+			if (recipe.key == key)
 			{
 				outRecipe = recipe;
 				return true;

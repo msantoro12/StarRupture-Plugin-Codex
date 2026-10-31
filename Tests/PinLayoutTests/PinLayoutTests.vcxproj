@@ -55,6 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Codex\UI\pin_layout.h" />
+    <ClInclude Include="..\..\Codex\UI\pin_set.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

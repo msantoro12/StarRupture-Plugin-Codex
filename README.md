@@ -43,9 +43,10 @@ loader the plugin shows "Needs loader" and stays off.
   and dragging one never moves another; a new pin appears where the arrangement would put it
   next to the last pin when that spot is free and on screen, else at the next free spot of the
   arrangement, else at the default spot. Switching to `Ungrouped` leaves every pin where it is;
-  switching back to `Grouped` puts the rest back under the first pin, which stays where it is. Pins are not
-  restored after a reload: the first pin you pin again returns to where the first one was last left, and the
-  rest are placed next to it. Clicking a pin raises that window; unpinning a pin lets the others
+  switching back to `Grouped` puts the rest back under the first pin, which stays where it is. Pins are saved as you pin and unpin them and come back at the next start, in the
+  same order and at the same spots, once a save has finished loading and the recipe list is ready (a RELOAD of the
+  plugin brings them back too). They are saved once for the game, not per save, because recipes are game-wide. A
+  saved pin whose recipe the game no longer has is dropped, with a line in the log. Clicking a pin raises that window; unpinning a pin lets the others
   take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging any pin then moves the group only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
 - **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
   Open and Unpin) have a button that opens a production planner for the recipe's output in
@@ -66,7 +67,8 @@ Settings are written to the plugin's config file on first run and can be edited 
 On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `PinGrouping` are dropdowns. The search
 box and pin positions have no field: the **Saved state** row at the end of the `Menu`
 section has a **Clear** button that puts the search box back in the centre and the pins back
-on their edge at once, even with the search box open. Values already in your config file
+on their edge at once, even with the search box open. It also forgets the saved pins, so they
+are not put back at the next start; pins already on screen stay until you unpin them. Values already in your config file
 keep working, and choices match ignoring case. The dropdowns and the hidden entries need a
 loader that has the Choice and Hidden config types (v71); on an older one the page shows
 them as plain text fields.
@@ -88,6 +90,7 @@ them as plain text fields.
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
 | `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 | `Menu` | `PinFreeOffsets` | empty | Where each pin was last placed while ungrouped, as `x,y` screen fractions separated by `;`, in pin order. Set by dragging a pin or pinning one; the first pin's spot is used again for the next first pin. No field on the config page; Clear resets it and puts the pins where they would go if just pinned |
+| `Menu` | `PinnedRecipes` | empty | The pinned recipes' asset names separated by `;`, in pin order. Written when a recipe is pinned or unpinned, and read once a save has finished loading to pin them again. Saved for the game, not per save. No field on the config page; Clear empties it |
 | `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 
 ---
