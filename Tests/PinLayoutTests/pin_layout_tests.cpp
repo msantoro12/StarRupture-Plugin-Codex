@@ -178,6 +178,16 @@ int main()
 		CheckOnScreen(c, p, sizes, at);
 		++cases;
 
+		// The lead's title bar is its drag handle: where the lead starts by
+		// default, no tile covers it.
+		if (!cascade && spot == 0)
+		{
+			bool clear = true;
+			for (int k = 1; k < count; ++k)
+				clear = clear && !Overlap({ sizes[0].w, p.frame }, at[0], sizes[k], at[k]);
+			Check(clear, "tiles leave the lead's title bar uncovered", Describe(c));
+		}
+
 		// Tiles do not overlap whenever the screen is big enough to hold them
 		// side by side: here, when the pins fill under half of it.
 		if (!cascade)
@@ -398,6 +408,10 @@ int main()
 			for (int frame = 4; frame < 12; ++frame)
 				steady = steady && history[frame].x == history[11].x && history[frame].y == history[11].y;
 			Check(steady, "a held-still drag leaves the lead where it settles", Describe(c));
+
+			Point laidOut[kMaxPins];
+			Arrange(p, sizes, count, wanted, laidOut);
+			Check(history[11].x == laidOut[0].x && history[11].y == laidOut[0].y, "the lead settles at its laid-out spot", Describe(c));
 		}
 
 		// Nothing pending: a window that drifted is moved back, one that did not is left alone.

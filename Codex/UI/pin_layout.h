@@ -169,7 +169,16 @@ namespace CodexPinLayout
 
 				const float b = alignEnd ? lineB - extentB(k) : lineB;
 				// Kept on screen as it is placed, so the line's span is the real one.
-				out[k] = ClampToScreen(p, sizes[k], columns ? Point{ b, cur } : Point{ cur, b });
+				Point at = ClampToScreen(p, sizes[k], columns ? Point{ b, cur } : Point{ cur, b });
+				// The lead's title bar is its handle: a window that would cover it
+				// starts past the lead along its line instead.
+				if (k > 0 && at.x < lead.x + sizes[0].w && at.x + sizes[k].w > lead.x &&
+					at.y < lead.y + p.frame && at.y + sizes[k].h > lead.y)
+				{
+					cur = columns ? lead.y + p.frame + gap : lead.x + sizes[0].w + gap;
+					at = ClampToScreen(p, sizes[k], columns ? Point{ b, cur } : Point{ cur, b });
+				}
+				out[k] = at;
 				cur += extentA(k) + gap;
 				const float placedB = columns ? out[k].x : out[k].y;
 				lineLo = (std::min)(lineLo, placedB);
