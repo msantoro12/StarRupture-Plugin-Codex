@@ -36,7 +36,7 @@ loader the plugin shows "Needs loader" and stays off.
   pin and the others follow it; the move cursor shows where it can be grabbed while the Codex
   or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
   Cascade each remember where you dropped the first pin, across sessions. Only the first pin
-  can be dragged; pressing and dragging any other pin moves nothing. If you unpin it, the next oldest becomes the first and takes its place. The
+  can be dragged; pressing and dragging any other pin moves nothing. If you unpin the first pin, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
   and puts the pins back on the edge. Clicking a pin brings it to the front without moving
   anything. Set `PinGrouping` to `Ungrouped` and every pin is moved by hand on its own,
