@@ -43,9 +43,10 @@ loader the plugin shows "Needs loader" and stays off.
   Open and Unpin) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
   (the default) adds the item at one machine's output, starruptureplanner.com and
-  starrupturecalc.com open their calculator for the item, and starrupture-planner.com opens
-  its planner page (it has no item link). Items a planner does not list open it without an
-  item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
+  starrupturecalc.com open their calculator for the item (starruptureplanner.com opens the
+  item's own page for the items its calculator has no recipe for), and starrupture-planner.com
+  opens its planner page (it has no item link). Items a planner does not list open it without
+  an item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
   address with `{item}`, `{name}` or `{game}`.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
   from the mod loader's config page or config file. `Planner` and `PinArrangement` are

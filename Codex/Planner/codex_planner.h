@@ -8,8 +8,10 @@
 // The planner is chosen in the plugin config (Planner/Planner): the default is
 // the StarRupture Planner (https://starrupture.goodstuff.software), which
 // adds an item from ?add=<item id>. starruptureplanner.com and
-// starrupturecalc.com open their calculator for the item;
-// starrupture-planner.com has no item link and opens its planner page.
+// starrupturecalc.com open their calculator for the item
+// (starruptureplanner.com opens the item's page for items its calculator
+// has no recipe for); starrupture-planner.com has no item link and opens
+// its planner page.
 // "Custom" uses Planner/CustomUrlTemplate with {item} replaced by the
 // StarRupture Planner's item id, {name} by the display name and {game} by the
 // game's UniqueItemName, each URL-encoded.

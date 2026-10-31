@@ -11,6 +11,7 @@ Needs a mod loader with plugin interface v71; on an older loader Codex shows "Ne
 The recipe window's redundant Close button is gone (use the X or Esc)
 Launch planner opens the StarRupture Planner's add-item link, adding the recipe's output at one machine's output
 Launch planner can open starruptureplanner.com or starrupturecalc.com at the item, or the starrupture-planner.com planner page (option Planner)
+starruptureplanner.com opens the item's own page for items its calculator cannot target; starrupturecalc.com now covers eight more items (Aerogel, Basic Fuel, Epoxy, Goethite Powder, Organic Compound, Plastic, Reinforced Frame, Reinforced Housing)
 CustomUrlTemplate also takes {name} (the item's display name) and {game} (the game's internal item name) next to {item}
 PinLayout, Planner and PinArrangement are now dropdowns on the mod loader's config page
 The search box and pin positions are no longer config fields; a Saved state row with a Clear button puts them back at once
