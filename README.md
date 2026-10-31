@@ -38,7 +38,7 @@ loader the plugin shows "Needs loader" and stays off.
   Cascade each remember where you dropped the first pin, across sessions. Only the first pin
   moves by hand: if you unpin it, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
-  and puts the pins back on the edge. Use the Codex to unpin them.
+  and puts the pins back on the edge. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
 - **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
   Open and Unpin) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -68,7 +68,7 @@ them as plain text fields.
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
-| `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` |
+| `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
 | `Menu` | `PinGap` | `true` | Leave a gap between tiled pins; off packs them edge to edge |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |

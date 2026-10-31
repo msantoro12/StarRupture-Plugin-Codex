@@ -1,0 +1,297 @@
+// Pin layout tests. A console program: the layout is a pure function of the
+// screen size, the window sizes, the lead position, the arrangement and the
+// gap (Codex/UI/pin_layout.h), so no game and no ImGui are needed.
+#include "UI/pin_layout.h"
+
+#include <cmath>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+using namespace CodexPinLayout;
+
+static int g_checks = 0;
+static int g_failed = 0;
+
+static void Check(bool ok, const char* what, const std::string& where)
+{
+	++g_checks;
+	if (!ok)
+	{
+		++g_failed;
+		printf("    FAIL %s [%s]\n", what, where.c_str());
+	}
+}
+
+namespace
+{
+	struct Resolution
+	{
+		const char* name;
+		float w, h;
+	};
+
+	const Resolution kResolutions[] = {
+		{ "1280x720", 1280, 720 },
+		{ "1920x1080", 1920, 1080 },
+		{ "2560x1440", 2560, 1440 },
+		{ "3840x2160", 3840, 2160 },
+		{ "3440x1440", 3440, 1440 },
+	};
+
+	// Pin windows of different heights and widths at font scale 1.0.
+	const Size kBasePins[kMaxPins] = {
+		{ 280, 150 }, { 300, 120 }, { 260, 190 }, { 320, 110 },
+		{ 290, 170 }, { 270, 135 }, { 310, 200 }, { 250, 125 },
+	};
+
+	struct Case
+	{
+		const Resolution* res;
+		float fontScale;
+		Edge edge;
+		bool cascade;
+		bool gap;
+		int count;
+		const char* leadName;
+		Point lead;
+	};
+
+	Params MakeParams(const Case& c)
+	{
+		Params p;
+		p.screenW = c.res->w;
+		p.screenH = c.res->h;
+		p.frame = 24.0f * c.fontScale;
+		p.step = 30.0f * c.fontScale;
+		p.edge = c.edge;
+		p.cascade = c.cascade;
+		p.gap = c.gap;
+		return p;
+	}
+
+	std::string Describe(const Case& c)
+	{
+		char buf[200];
+		snprintf(buf, sizeof(buf), "%s font %.1f %s %s gap %s %d pins lead %s",
+			c.res->name, c.fontScale, c.edge == Edge::Right ? "Right" : c.edge == Edge::Left ? "Left" : "Top",
+			c.cascade ? "cascade" : "tile", c.gap ? "on" : "off", c.count, c.leadName);
+		return buf;
+	}
+
+	bool Overlap(Size sa, Point a, Size sb, Point b)
+	{
+		const float eps = 0.01f;
+		return a.x + sa.w > b.x + eps && b.x + sb.w > a.x + eps && a.y + sa.h > b.y + eps && b.y + sb.h > a.y + eps;
+	}
+
+	int Overlaps(const Size* sizes, const Point* at, int count)
+	{
+		int n = 0;
+		for (int i = 0; i < count; ++i)
+			for (int j = i + 1; j < count; ++j)
+				n += Overlap(sizes[i], at[i], sizes[j], at[j]) ? 1 : 0;
+		return n;
+	}
+
+	// Every window inside the screen, the lead where it was asked to be (kept
+	// on screen), every size and position finite.
+	void CheckOnScreen(const Case& c, const Params& p, const Size* sizes, const Point* at)
+	{
+		const std::string where = Describe(c);
+		bool inside = true;
+		for (int k = 0; k < c.count; ++k)
+		{
+			const float eps = 0.01f;
+			if (!std::isfinite(at[k].x) || !std::isfinite(at[k].y) || at[k].x < -eps || at[k].y < -eps ||
+				at[k].x + sizes[k].w > p.screenW + eps || at[k].y + sizes[k].h > p.screenH + eps)
+			{
+				inside = false;
+				printf("      pin %d at %.1f,%.1f size %.0fx%.0f\n", k, at[k].x, at[k].y, sizes[k].w, sizes[k].h);
+			}
+		}
+		Check(inside, "every pin fully on screen", where);
+
+		const Point want = ClampToScreen(p, sizes[0], c.lead);
+		Check(at[0].x == want.x && at[0].y == want.y, "lead stays where it was put", where);
+	}
+}
+
+int main()
+{
+	// 1. The grid: five resolutions, three lead spots, both arrangements, gap
+	//    on and off, three edges, 1 to 8 pins, font scale 1.0 and 2.0.
+	int cases = 0;
+	int tileOverlapCases = 0;
+	int tileOverlapFeasible = 0;
+	printf("grid\n");
+	for (const Resolution& res : kResolutions)
+	for (float fontScale : { 1.0f, 2.0f })
+	for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+	for (bool cascade : { false, true })
+	for (bool gap : { true, false })
+	for (int count = 1; count <= kMaxPins; ++count)
+	for (int spot = 0; spot < 3; ++spot)
+	{
+		Size sizes[kMaxPins];
+		for (int k = 0; k < count; ++k)
+			sizes[k] = { kBasePins[k].w * fontScale, kBasePins[k].h * fontScale };
+
+		Case c{ &res, fontScale, edge, cascade, gap, count, "", {} };
+		const Params p = MakeParams(c);
+		if (spot == 0)
+		{
+			c.leadName = "default";
+			c.lead = DefaultLead(p, sizes[0]);
+		}
+		else if (spot == 1)
+		{
+			c.leadName = "top-left";
+			c.lead = { 0.0f, 0.0f };
+		}
+		else
+		{
+			c.leadName = "bottom-right";
+			c.lead = { res.w - sizes[0].w - 4.0f, res.h - sizes[0].h - 4.0f };
+		}
+
+		Point at[kMaxPins];
+		Arrange(p, sizes, count, c.lead, at);
+		CheckOnScreen(c, p, sizes, at);
+		++cases;
+
+		// Tiles do not overlap whenever the screen is big enough to hold them
+		// side by side: here, when the pins fill under half of it.
+		if (!cascade)
+		{
+			float area = 0.0f;
+			for (int k = 0; k < count; ++k)
+				area += sizes[k].w * sizes[k].h;
+			if (area < 0.25f * res.w * res.h)
+			{
+				++tileOverlapFeasible;
+				const int n = Overlaps(sizes, at, count);
+				if (n != 0)
+				{
+					++tileOverlapCases;
+					printf("      %d overlapping pairs\n", n);
+				}
+				Check(n == 0, "tiles do not overlap when the screen has room", Describe(c));
+			}
+		}
+	}
+	printf("  %d layouts checked, %d tile layouts with room (%d overlapped)\n", cases, tileOverlapFeasible, tileOverlapCases);
+
+	// 2. The gap: one column of tiles under a lead at the default spot is
+	//    exactly the item spacing apart with the gap on, touching with it off.
+	printf("gap\n");
+	for (const Resolution& res : kResolutions)
+	for (float fontScale : { 1.0f, 2.0f })
+	for (bool gap : { true, false })
+	{
+		Size sizes[3] = { { 280 * fontScale, 80 * fontScale }, { 300 * fontScale, 70 * fontScale }, { 260 * fontScale, 60 * fontScale } };
+		Case c{ &res, fontScale, Edge::Right, false, gap, 3, "default", {} };
+		const Params p = MakeParams(c);
+		c.lead = DefaultLead(p, sizes[0]);
+		Point at[3];
+		Arrange(p, sizes, 3, c.lead, at);
+		const float spacing = gap ? p.step - p.frame : 0.0f;
+		Check(std::fabs(at[1].y - (at[0].y + sizes[0].h + spacing)) < 0.01f, "second tile sits one gap below the lead", Describe(c));
+		Check(std::fabs(at[2].y - (at[1].y + sizes[1].h + spacing)) < 0.01f, "third tile sits one gap below the second", Describe(c));
+		Check(std::fabs((at[1].x + sizes[1].w) - (at[0].x + sizes[0].w)) < 0.01f, "Right column lines up on the lead's right edge", Describe(c));
+	}
+
+	// 3. Cascade: one step down and one step in per pin when there is room.
+	printf("cascade\n");
+	for (const Resolution& res : kResolutions)
+	{
+		Size sizes[4] = { { 280, 150 }, { 300, 120 }, { 260, 190 }, { 320, 110 } };
+		Case c{ &res, 1.0f, Edge::Right, true, true, 4, "default", {} };
+		const Params p = MakeParams(c);
+		c.lead = DefaultLead(p, sizes[0]);
+		Point at[4];
+		Arrange(p, sizes, 4, c.lead, at);
+		for (int k = 1; k < 4; ++k)
+		{
+			Check(std::fabs(at[k].y - (at[0].y + p.step * static_cast<float>(k))) < 0.01f, "cascade steps one title bar down", Describe(c));
+			Check(std::fabs(at[k].x - (at[0].x - p.step * static_cast<float>(k))) < 0.01f, "Right cascade steps one title bar in", Describe(c));
+		}
+	}
+
+	// 4. Wrapping goes to the side with room. A lead in the bottom-right
+	//    corner of a 1280x720 screen: the next pin starts a column to its
+	//    left; a lead in the top-left corner on the Right edge: to its right.
+	printf("wrap\n");
+	{
+		Size sizes[6] = { { 280, 150 }, { 300, 120 }, { 260, 190 }, { 320, 110 }, { 290, 170 }, { 270, 135 } };
+		Case c{ &kResolutions[0], 1.0f, Edge::Right, false, true, 6, "bottom-right", {} };
+		const Params p = MakeParams(c);
+		Point at[6];
+		Arrange(p, sizes, 6, { 1280 - 280 - 4.0f, 720 - 150 - 4.0f }, at);
+		Check(at[1].x + sizes[1].w <= at[0].x + 0.01f, "wrap from the bottom-right goes left of the lead column", Describe(c));
+		Check(std::fabs(at[1].y - p.step) < 0.01f, "the new column starts at the margin", Describe(c));
+
+		c.leadName = "top-left";
+		Arrange(p, sizes, 6, { 0.0f, 0.0f }, at);
+		bool rightOfLead = true;
+		bool wrapped = false;
+		for (int k = 1; k < 6; ++k)
+			if (at[k].y < at[k - 1].y)
+			{
+				wrapped = true;
+				rightOfLead = rightOfLead && at[k].x >= at[0].x + sizes[0].w - 0.01f;
+			}
+		Check(wrapped, "six pins on 720p wrap", Describe(c));
+		Check(rightOfLead, "wrap from the top-left goes right of the lead column", Describe(c));
+
+		// Top edge, lead in the bottom row: new rows go up.
+		Case t{ &kResolutions[0], 1.0f, Edge::Top, false, true, 6, "bottom-left", {} };
+		const Params tp = MakeParams(t);
+		Size wide[6] = { { 400, 120 }, { 400, 120 }, { 400, 120 }, { 400, 120 }, { 400, 120 }, { 400, 120 } };
+		Arrange(tp, wide, 6, { 0.0f, 720 - 120.0f }, at);
+		bool someAbove = false;
+		for (int k = 1; k < 6; ++k)
+			someAbove = someAbove || at[k].y < at[0].y - 0.01f;
+		Check(someAbove, "Top rows wrap upwards when the lead is in the bottom row", Describe(t));
+	}
+
+	// 5. Resolution change: a spot saved as a screen fraction at 4K comes back
+	//    on screen at 720p, at the same fraction when it fits.
+	printf("resolution change\n");
+	{
+		const Size size{ 300, 200 };
+		const float fx = 0.97f, fy = 0.95f; // near the bottom-right corner
+		for (const Resolution& res : kResolutions)
+		{
+			Case c{ &res, 1.0f, Edge::Right, false, true, 1, "saved", {} };
+			const Params p = MakeParams(c);
+			const Point at = LeadFromFraction(p, size, fx, fy);
+			Check(at.x >= 0.0f && at.y >= 0.0f && at.x + size.w <= res.w + 0.01f && at.y + size.h <= res.h + 0.01f,
+				"a saved spot is re-clamped to the new screen", Describe(c));
+		}
+		const Params roomy = MakeParams({ &kResolutions[3], 1.0f, Edge::Right, false, true, 1, "", {} });
+		const Point mid = LeadFromFraction(roomy, size, 0.5f, 0.5f);
+		Check(mid.x == 0.5f * 3840 && mid.y == 0.5f * 2160, "a spot that fits keeps its fraction", "3840x2160");
+		const Params none = MakeParams({ &kResolutions[0], 1.0f, Edge::Right, false, true, 1, "", {} });
+		const Point d = DefaultLead(none, size);
+		Check(d.x == 1280 - none.step - size.w && d.y == none.step, "the default spot is one step in from the edge", "1280x720");
+	}
+
+	// 6. A window bigger than the screen (a tiny window, a huge font) sits at 0
+	//    and nothing goes negative or not-a-number.
+	printf("oversize\n");
+	{
+		Case c{ &kResolutions[0], 2.0f, Edge::Right, false, true, 3, "default", {} };
+		const Params p = MakeParams(c);
+		Size sizes[3] = { { 1400, 900 }, { 1400, 900 }, { 300, 200 } };
+		Point at[3];
+		Arrange(p, sizes, 3, { 500, 500 }, at);
+		bool fine = true;
+		for (const Point& pt : at)
+			fine = fine && std::isfinite(pt.x) && std::isfinite(pt.y) && pt.x >= 0.0f && pt.y >= 0.0f;
+		Check(fine && at[0].x == 0.0f && at[0].y == 0.0f, "an oversize lead sits at the corner", Describe(c));
+	}
+
+	printf("\n%d checks, %d failed\n", g_checks, g_failed);
+	return g_failed == 0 ? 0 : 1;
+}

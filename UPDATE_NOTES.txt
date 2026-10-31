@@ -12,5 +12,7 @@ The recipe window's redundant Close button is gone (use the X or Esc)
 Launch planner opens the StarRupture Planner's add-item link, adding the recipe's output at one machine's output
 Launch planner can open starruptureplanner.com or starrupturecalc.com at the item, or the starrupture-planner.com planner page (option Planner)
 CustomUrlTemplate also takes {name} (the item's display name) and {game} (the game's internal item name) next to {item}
-Planner and PinArrangement are now dropdowns on the mod loader's config page
+PinLayout, Planner and PinArrangement are now dropdowns on the mod loader's config page
 The search box and pin positions are no longer config fields; a Saved state row with a Clear button puts them back at once
+Pins stay fully on screen at any resolution or font scale: tiles wrap to the side with room, a cascade takes shorter steps near the bottom, and a saved first-pin spot is kept on screen when the screen size changes
+Pins follow the first one with no lag while it is dragged, and cascaded pins keep their title bars in pin order

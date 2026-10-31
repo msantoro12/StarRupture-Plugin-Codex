@@ -29,9 +29,9 @@ namespace CodexConfig
 		{
 			"Menu",
 			"PinLayout",
-			ConfigValueType::String,
+			ConfigValueType::Choice,
 			"Right",
-			"Screen edge pinned recipes start from: \"Right\", \"Left\" or \"Top\""
+			"Screen edge pinned recipes start from|Right|Left|Top"
 		},
 		{
 			"Menu",
