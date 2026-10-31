@@ -1988,6 +1988,7 @@ namespace CodexUI
 					slot.restoring = false;
 					if (saved.set)
 					{
+						slot.fresh = false;
 						RequestPinPos(slot, CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y));
 						return;
 					}
@@ -2061,8 +2062,8 @@ namespace CodexUI
 		}
 
 		// Pins a recipe in the next free slot. `restoring` is a pin coming back
-		// from the saved set: it is not saved again, and ungrouped it returns to
-		// its saved spot.
+		// from the saved set: it is not saved again, nothing glides for it, and
+		// ungrouped it returns to its saved spot.
 		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe, bool restoring)
 		{
 			if (!nativeRecipe || IsPinned(nativeRecipe))
@@ -2079,7 +2080,7 @@ namespace CodexUI
 			PinSlot& slot = g_pins[index];
 			slot.nativeRecipe = nativeRecipe;
 			slot.recipeKey = info.key;
-			slot.restoring = restoring;
+			slot.restoring = restoring && g_pinSettings.free;
 			TitleSlot(index, info.displayName.c_str());
 
 			// Nothing to move yet: changes made while no pin was up are already in effect.
@@ -2093,7 +2094,8 @@ namespace CodexUI
 			// The pins already up ease aside for it; it takes its spot at once.
 			slot.fresh = true;
 			slot.glide.active = false;
-			ArmPinGlide();
+			if (!restoring)
+				ArmPinGlide();
 
 			if (g_pinSettings.free)
 			{
@@ -2182,6 +2184,7 @@ namespace CodexUI
 				g_pins[k].placePending = g_pins[k + 1].placePending;
 				g_pins[k].placeWait = g_pins[k + 1].placeWait;
 				g_pins[k].fresh = g_pins[k + 1].fresh;
+				g_pins[k].restoring = g_pins[k + 1].restoring;
 				g_pins[k].glide.active = false;
 				if (g_pinSettings.free)
 				{
