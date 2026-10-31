@@ -22,123 +22,126 @@ namespace CodexPlanner
 		// its display name second ("CalciumBlock" and "Calcium Block" are the
 		// planner's "block_calcium").
 		//
-		// The other two columns are the same item's id on starruptureplanner.com
+		// The other columns are the same item's id on starruptureplanner.com
 		// (its /database page) and starrupturecalc.com (its /items/ pages), found
-		// by the display name. They are empty where that site has no such item or
-		// its calculator cannot target it, so the planner opens without an item.
+		// by the display name. starruptureplannerId is the id its calculator takes;
+		// starruptureplannerPageId is the id of its /items/ page, filled only where
+		// the calculator has no id (it has no recipe for the item). They are empty
+		// where that site has no such item, so the planner opens without an item.
 		struct PlannerItem
 		{
 			const char* id;
 			const char* name;
 			const char* starruptureplannerId;
+			const char* starruptureplannerPageId;
 			const char* starrupturecalcId;
 		};
 
 		constexpr PlannerItem kPlannerItems[] = {
-			{ "accumulator", "Accumulator", "", "accumulator" },
-			{ "aerogel", "Aerogel", "", "" },
-			{ "airlock", "Airlock", "", "airlock" },
-			{ "anti-radiationcovers", "Anti-Radiation Covers", "", "anti-radiation-covers" },
-			{ "applicator", "Applicator", "comp_applicator", "syringe" },
-			{ "basic_building", "Basic Building Material", "item_bbm", "basic-building-material" },
-			{ "basicfuel", "Basic Fuel", "", "" },
-			{ "battery", "Battery", "comp_battery", "battery" },
-			{ "biofilament", "Biofilament", "", "biofilament" },
-			{ "calcite_sheets", "Calcite Sheets", "sheet_calcite", "calcite-sheets" },
-			{ "block_calcium", "Calcium Block", "block_calcium", "calcium-block" },
-			{ "ore_calcium", "Calcium Ore", "", "calcium-ore" },
-			{ "powder_calcium", "Calcium Powder", "powder_calcium", "calcium-powder" },
-			{ "carbonsonar", "Carbon Sonar", "", "carbon-sonar" },
-			{ "ceramics", "Ceramics", "comp_ceramics", "ceramics" },
-			{ "chemicals", "Chemicals", "comp_chemicals", "explosive" },
-			{ "condenser", "Condenser", "", "condenser" },
-			{ "converter", "Converter", "", "converter" },
-			{ "cyclotrone", "Cyclotrone", "", "cyclotrone" },
-			{ "dome", "Dome", "", "dome" },
-			{ "electromagnet", "Electromagnet", "", "electromagnet" },
-			{ "electromagnetic_coil", "Electromagnetic Coil", "comp_electromagnetic_coil", "electromagnetic-coil" },
-			{ "electronics", "Electronics", "comp_electronics", "electronics" },
-			{ "epoxy", "Epoxy", "", "" },
-			{ "grenade", "Explosive Charge", "", "grenade" },
-			{ "generator", "Generator", "", "generator" },
-			{ "glass", "Glass", "comp_glass", "glass" },
-			{ "goethiteingot", "Goethite Ingot", "", "goethite-ingot" },
-			{ "goethitelattice", "Goethite Lattice", "", "" },
-			{ "goethiteore", "Goethite Ore", "", "goethite-ore" },
-			{ "goethitepowder", "Goethite Powder", "", "" },
-			{ "hardening_agent", "Hardening Agent", "comp_hardening_agent", "hardening-agent" },
-			{ "heat_sheet", "Heat Resistant Sheet", "sheet_heat_resistant", "heat-resistant-sheet" },
-			{ "heatshield", "Heat Shield", "", "heat-shield" },
-			{ "heavy_ammo", "Heavy Ammo", "ammo_heavy", "heavy-ammo-item" },
-			{ "helium", "Helium-3", "", "helium-ore" },
-			{ "impeller", "Impeller", "comp_impeller", "impeller" },
-			{ "inductor", "Inductor", "comp_inductor", "coil" },
-			{ "intermediate_building", "Intermediate Building Material", "item_ibm", "intermediate-building-material" },
-			{ "ionbomb", "Ion Bomb", "", "ion-bomb" },
-			{ "ion_injector", "Ion Injector", "", "ion-injector" },
-			{ "ionstabilizer", "Ion Stabilizer", "", "ion-stabilizer" },
-			{ "ionthrusters", "Ion Thrusters", "", "ion-thrusters" },
-			{ "laser_emitter", "Laser Emitter", "", "laser-emitter" },
-			{ "lens", "Lens", "", "lens" },
-			{ "liquid_helium", "Liquid Helium", "", "liquid-helium" },
-			{ "nanofiber", "Nanofiber", "", "nanofibre" },
-			{ "nanosyringe", "Nanosyringe", "", "nanosyringe" },
-			{ "nozzle", "Nozzle", "comp_nozzle", "nozzle" },
-			{ "onboardinstruments", "Onboard Instruments", "", "onboard-instruments" },
-			{ "organiccompound", "Organic Compound", "", "" },
-			{ "pistol_ammo", "Pistol Ammo", "ammo_pistol", "pistol-ammo-item" },
-			{ "uberoil", "Plastic", "", "" },
-			{ "plasticdust", "Plastic Dust", "", "plastic-dust" },
-			{ "magicoilore", "Powerium", "", "" },
-			{ "pressure_tank", "Pressure Tank", "", "pressure-tank" },
-			{ "pressurized_helium", "Pressurized Helium", "fluid_pressurized_helium", "pressurized-helium" },
-			{ "pseudorubberinsulator", "Pseudorubber Insulator", "", "pseudorubber-insulator" },
-			{ "pump", "Pump", "comp_pump", "pump" },
-			{ "quantumtranqualizer", "Quantum Tranquilizer", "", "quantum-tranqualizer" },
-			{ "rnastabilizer", "RNA Stabilizer", "", "rna-stabilizer" },
-			{ "rtsc", "RTSC", "", "rtsc" },
-			{ "rtscgenerator", "RTSC Generator", "", "rtsc-generator" },
-			{ "refinedoil", "Refined Oil", "", "" },
-			{ "reinforcedframe", "Reinforced Frame", "", "" },
-			{ "reinforcedhousing", "Reinforced Housing", "", "" },
-			{ "resonator", "Resonator", "", "resonator" },
-			{ "rocketengine", "Rocket Engine", "", "rocket-engine" },
-			{ "rocketfuel", "Rocket Fuel", "", "rocket-fuel" },
-			{ "rotor", "Rotor", "comp_rotor", "rotor" },
-			{ "satellitebody", "Satellite Body", "", "satellite-body" },
-			{ "scafolding", "Scaffolding", "", "scafolding" },
-			{ "scanner", "Scanner", "", "scanner" },
-			{ "shotgun_ammo", "Shotgun Ammo", "ammo_shotgun", "shotgun-ammo-item" },
-			{ "stabilizer", "Stabilizer", "comp_stabilizer", "gyroscope" },
-			{ "standard_ammo", "Standard Ammo", "ammo_standard", "standard-ammo-item" },
-			{ "stator", "Stator", "comp_stator", "stator" },
-			{ "substancefhs-135-493", "Substance #FHS-135-493", "", "substance-fhs-135-493" },
-			{ "ore_sulfur", "Sulfur Ore", "", "sulphur-ore" },
-			{ "sulfuric_acid", "Sulfuric Acid", "fluid_sulfuric_acid", "sulphuric-acid" },
-			{ "superconductor", "Superconductor", "", "superconductor" },
-			{ "supermagnet", "Supermagnet", "comp_supermagnet", "supermagnet" },
-			{ "syntheticdna", "Synthetic DNA", "", "synthetic-dna" },
-			{ "syntheticprotein", "Synthetic Protein", "", "synthetic-protein" },
-			{ "synthetic_resin", "Synthetic Resin", "", "synthetic-resin" },
-			{ "synthetic_silicon", "Synthetic Silicon", "comp_synthetic_silicon", "silica-sand" },
-			{ "bar_titanium", "Titanium Bar", "ingot_titanium", "titanium-bar" },
-			{ "titanium_beam", "Titanium Beam", "beam_titanium", "titanium-beam" },
-			{ "titanium_housing", "Titanium Housing", "comp_titanium_housing", "titanium-housing" },
-			{ "ore_titanium", "Titanium Ore", "", "titanium-ore" },
-			{ "titanium_rod", "Titanium Rod", "rod_titanium", "titanium-rod" },
-			{ "titanium_sheet", "Titanium Sheet", "sheet_titanium", "titanium-sheet" },
-			{ "ubertitanium", "Titanoferrite Ingot", "", "uber-titanium" },
-			{ "trackingdevice", "Tracking Device", "", "tracking-device" },
-			{ "tube", "Tube", "comp_tube", "tube" },
-			{ "turbine", "Turbine", "comp_turbine", "turbine" },
-			{ "uberfilament", "Uberfilament", "", "uberfilament" },
-			{ "valve", "Valve", "comp_valve", "valve" },
-			{ "bar_wolfram", "Wolfram Bar", "ingot_wolfram", "wolfram-bar" },
-			{ "ore_wolfram", "Wolfram Ore", "", "wolfram-ore" },
-			{ "wolfram_plate", "Wolfram Plate", "plate_wolfram", "wolfram-plate" },
-			{ "powder_wolfram", "Wolfram Powder", "powder_wolfram", "wolfram-powder" },
-			{ "uberwolfram", "Wolfram Steel Ingot", "", "uber-wolfram" },
-			{ "wolfram_wire", "Wolfram Wire", "wire_wolfram", "wolfram-wire" },
+			{ "accumulator", "Accumulator", "", "comp_accumulator", "accumulator" },
+			{ "aerogel", "Aerogel", "", "comp_aerogel", "aerogel" },
+			{ "airlock", "Airlock", "", "comp_airlock", "airlock" },
+			{ "anti-radiationcovers", "Anti-Radiation Covers", "", "comp_anti_radiation_covers", "anti-radiation-covers" },
+			{ "applicator", "Applicator", "comp_applicator", "", "syringe" },
+			{ "basic_building", "Basic Building Material", "item_bbm", "", "basic-building-material" },
+			{ "basicfuel", "Basic Fuel", "", "item_basic_fuel", "basic-fuel" },
+			{ "battery", "Battery", "comp_battery", "", "battery" },
+			{ "biofilament", "Biofilament", "", "comp_biofilament", "biofilament" },
+			{ "calcite_sheets", "Calcite Sheets", "sheet_calcite", "", "calcite-sheets" },
+			{ "block_calcium", "Calcium Block", "block_calcium", "", "calcium-block" },
+			{ "ore_calcium", "Calcium Ore", "", "ore_calcium", "calcium-ore" },
+			{ "powder_calcium", "Calcium Powder", "powder_calcium", "", "calcium-powder" },
+			{ "carbonsonar", "Carbon Sonar", "", "comp_carbon_sonar", "carbon-sonar" },
+			{ "ceramics", "Ceramics", "comp_ceramics", "", "ceramics" },
+			{ "chemicals", "Chemicals", "comp_chemicals", "", "explosive" },
+			{ "condenser", "Condenser", "", "comp_condenser", "condenser" },
+			{ "converter", "Converter", "", "comp_converter", "converter" },
+			{ "cyclotrone", "Cyclotrone", "", "comp_cyclotrone", "cyclotrone" },
+			{ "dome", "Dome", "", "comp_dome", "dome" },
+			{ "electromagnet", "Electromagnet", "", "comp_electromagnet", "electromagnet" },
+			{ "electromagnetic_coil", "Electromagnetic Coil", "comp_electromagnetic_coil", "", "electromagnetic-coil" },
+			{ "electronics", "Electronics", "comp_electronics", "", "electronics" },
+			{ "epoxy", "Epoxy", "", "comp_epoxy", "epoxy" },
+			{ "grenade", "Explosive Charge", "", "item_explosive_charge", "grenade" },
+			{ "generator", "Generator", "", "comp_generator", "generator" },
+			{ "glass", "Glass", "comp_glass", "", "glass" },
+			{ "goethiteingot", "Goethite Ingot", "", "ingot_goethite", "goethite-ingot" },
+			{ "goethitelattice", "Goethite Lattice", "", "comp_goethite_lattice", "" },
+			{ "goethiteore", "Goethite Ore", "", "ore_goethite", "goethite-ore" },
+			{ "goethitepowder", "Goethite Powder", "", "powder_goethite", "goethite-powder" },
+			{ "hardening_agent", "Hardening Agent", "comp_hardening_agent", "", "hardening-agent" },
+			{ "heat_sheet", "Heat Resistant Sheet", "sheet_heat_resistant", "", "heat-resistant-sheet" },
+			{ "heatshield", "Heat Shield", "", "comp_heat_shield", "heat-shield" },
+			{ "heavy_ammo", "Heavy Ammo", "ammo_heavy", "", "heavy-ammo-item" },
+			{ "helium", "Helium-3", "", "gas_helium3", "helium-ore" },
+			{ "impeller", "Impeller", "comp_impeller", "", "impeller" },
+			{ "inductor", "Inductor", "comp_inductor", "", "coil" },
+			{ "intermediate_building", "Intermediate Building Material", "item_ibm", "", "intermediate-building-material" },
+			{ "ionbomb", "Ion Bomb", "", "item_ion_bomb", "ion-bomb" },
+			{ "ion_injector", "Ion Injector", "", "comp_ion_injector", "ion-injector" },
+			{ "ionstabilizer", "Ion Stabilizer", "", "comp_ion_stabilizer", "ion-stabilizer" },
+			{ "ionthrusters", "Ion Thrusters", "", "comp_ion_thrusters", "ion-thrusters" },
+			{ "laser_emitter", "Laser Emitter", "", "comp_laser_emitter", "laser-emitter" },
+			{ "lens", "Lens", "", "comp_lens", "lens" },
+			{ "liquid_helium", "Liquid Helium", "", "comp_liquid_helium", "liquid-helium" },
+			{ "nanofiber", "Nanofiber", "", "", "nanofibre" },
+			{ "nanosyringe", "Nanosyringe", "", "comp_nanosyringe", "nanosyringe" },
+			{ "nozzle", "Nozzle", "comp_nozzle", "", "nozzle" },
+			{ "onboardinstruments", "Onboard Instruments", "", "comp_onboard_instruments", "onboard-instruments" },
+			{ "organiccompound", "Organic Compound", "", "comp_organic_compound", "organic-compound" },
+			{ "pistol_ammo", "Pistol Ammo", "ammo_pistol", "", "pistol-ammo-item" },
+			{ "uberoil", "Plastic", "", "comp_plastic", "uber-oil" },
+			{ "plasticdust", "Plastic Dust", "", "item_plastic_dust", "plastic-dust" },
+			{ "magicoilore", "Powerium", "", "", "" },
+			{ "pressure_tank", "Pressure Tank", "", "comp_pressure_tank", "pressure-tank" },
+			{ "pressurized_helium", "Pressurized Helium", "fluid_pressurized_helium", "", "pressurized-helium" },
+			{ "pseudorubberinsulator", "Pseudorubber Insulator", "", "comp_pseudorubber_insulator", "pseudorubber-insulator" },
+			{ "pump", "Pump", "comp_pump", "", "pump" },
+			{ "quantumtranqualizer", "Quantum Tranquilizer", "", "comp_quantum_tranquilizer", "quantum-tranqualizer" },
+			{ "rnastabilizer", "RNA Stabilizer", "", "comp_rna_stabilizer", "rna-stabilizer" },
+			{ "rtsc", "RTSC", "", "item_rtsc", "rtsc" },
+			{ "rtscgenerator", "RTSC Generator", "", "item_rtsc_generator", "rtsc-generator" },
+			{ "refinedoil", "Refined Oil", "", "", "" },
+			{ "reinforcedframe", "Reinforced Frame", "", "comp_reinforced_frame", "reinforced-frame" },
+			{ "reinforcedhousing", "Reinforced Housing", "", "comp_reinforced_housing", "reinforced-housing" },
+			{ "resonator", "Resonator", "", "", "resonator" },
+			{ "rocketengine", "Rocket Engine", "", "comp_rocket_engine", "rocket-engine" },
+			{ "rocketfuel", "Rocket Fuel", "", "comp_rocket_fuel", "rocket-fuel" },
+			{ "rotor", "Rotor", "comp_rotor", "", "rotor" },
+			{ "satellitebody", "Satellite Body", "", "comp_satellite_body", "satellite-body" },
+			{ "scafolding", "Scaffolding", "", "comp_scaffolding", "scafolding" },
+			{ "scanner", "Scanner", "", "comp_scanner", "scanner" },
+			{ "shotgun_ammo", "Shotgun Ammo", "ammo_shotgun", "", "shotgun-ammo-item" },
+			{ "stabilizer", "Stabilizer", "comp_stabilizer", "", "gyroscope" },
+			{ "standard_ammo", "Standard Ammo", "ammo_standard", "", "standard-ammo-item" },
+			{ "stator", "Stator", "comp_stator", "", "stator" },
+			{ "substancefhs-135-493", "Substance #FHS-135-493", "", "comp_fhs_135_493", "substance-fhs-135-493" },
+			{ "ore_sulfur", "Sulfur Ore", "", "ore_sulfur", "sulphur-ore" },
+			{ "sulfuric_acid", "Sulfuric Acid", "fluid_sulfuric_acid", "", "sulphuric-acid" },
+			{ "superconductor", "Superconductor", "", "comp_superconductor", "superconductor" },
+			{ "supermagnet", "Supermagnet", "comp_supermagnet", "", "supermagnet" },
+			{ "syntheticdna", "Synthetic DNA", "", "comp_synthetic_dna", "synthetic-dna" },
+			{ "syntheticprotein", "Synthetic Protein", "", "comp_synthetic_protein", "synthetic-protein" },
+			{ "synthetic_resin", "Synthetic Resin", "", "", "synthetic-resin" },
+			{ "synthetic_silicon", "Synthetic Silicon", "comp_synthetic_silicon", "", "silica-sand" },
+			{ "bar_titanium", "Titanium Bar", "ingot_titanium", "", "titanium-bar" },
+			{ "titanium_beam", "Titanium Beam", "beam_titanium", "", "titanium-beam" },
+			{ "titanium_housing", "Titanium Housing", "comp_titanium_housing", "", "titanium-housing" },
+			{ "ore_titanium", "Titanium Ore", "", "ore_titanium", "titanium-ore" },
+			{ "titanium_rod", "Titanium Rod", "rod_titanium", "", "titanium-rod" },
+			{ "titanium_sheet", "Titanium Sheet", "sheet_titanium", "", "titanium-sheet" },
+			{ "ubertitanium", "Titanoferrite Ingot", "", "ingot_titanoferrite", "uber-titanium" },
+			{ "trackingdevice", "Tracking Device", "", "comp_tracking_device", "tracking-device" },
+			{ "tube", "Tube", "comp_tube", "", "tube" },
+			{ "turbine", "Turbine", "comp_turbine", "", "turbine" },
+			{ "uberfilament", "Uberfilament", "", "comp_uberfilament", "uberfilament" },
+			{ "valve", "Valve", "comp_valve", "", "valve" },
+			{ "bar_wolfram", "Wolfram Bar", "ingot_wolfram", "", "wolfram-bar" },
+			{ "ore_wolfram", "Wolfram Ore", "", "ore_wolfram", "wolfram-ore" },
+			{ "wolfram_plate", "Wolfram Plate", "plate_wolfram", "", "wolfram-plate" },
+			{ "powder_wolfram", "Wolfram Powder", "powder_wolfram", "", "wolfram-powder" },
+			{ "uberwolfram", "Wolfram Steel Ingot", "", "comp_wolfram_steel_ingot", "uber-wolfram" },
+			{ "wolfram_wire", "Wolfram Wire", "wire_wolfram", "", "wolfram-wire" },
 		};
 
 		// Game UniqueItemNames that spell the item differently from the planner.
@@ -249,20 +252,24 @@ namespace CodexPlanner
 
 		// A planner the Launch planner button can open. itemId picks the item's
 		// id on that planner. A planner with no item link leaves itemId and
-		// itemParam null and always opens at url.
+		// itemParam null and always opens at url. A planner whose calculator
+		// cannot target every item can name a second form: an item with no
+		// itemId but with a pageId opens at pageUrl with that id appended.
 		struct PlannerSite
 		{
 			const char* name;      // value of Planner/Planner; the first site is the default
 			const char* url;       // opened as is, or with itemParam and the item id appended
 			const char* itemParam;
 			const char* PlannerItem::* itemId;
+			const char* pageUrl;
+			const char* PlannerItem::* pageId;
 		};
 
 		constexpr PlannerSite kPlannerSites[] = {
-			{ "StarRupture Planner",     "https://starrupture.goodstuff.software/",       "?add=",  &PlannerItem::id },
-			{ "starruptureplanner.com",  "https://starruptureplanner.com/calculator",     "?item=", &PlannerItem::starruptureplannerId },
-			{ "starrupturecalc.com",     "https://www.starrupturecalc.com/",              "?item=", &PlannerItem::starrupturecalcId },
-			{ "starrupture-planner.com", "https://www.starrupture-planner.com/planner/",  nullptr,  nullptr },
+			{ "StarRupture Planner",     "https://starrupture.goodstuff.software/",       "?add=",  &PlannerItem::id,                   nullptr, nullptr },
+			{ "starruptureplanner.com",  "https://starruptureplanner.com/calculator",     "?item=", &PlannerItem::starruptureplannerId, "https://starruptureplanner.com/items/", &PlannerItem::starruptureplannerPageId },
+			{ "starrupturecalc.com",     "https://www.starrupturecalc.com/",              "?item=", &PlannerItem::starrupturecalcId,    nullptr, nullptr },
+			{ "starrupture-planner.com", "https://www.starrupture-planner.com/planner/",  nullptr,  nullptr,                            nullptr, nullptr },
 		};
 
 		std::string BuildUrl(const PlannerItem* item, const std::string& uniqueItemName, const std::string& displayName)
@@ -289,8 +296,11 @@ namespace CodexPlanner
 				return url;
 
 			const char* itemId = item ? item->*site->itemId : "";
+			const char* pageItemId = (item && site->pageId) ? item->*site->pageId : "";
 			if (*itemId)
 				url += site->itemParam + UrlEncode(itemId);
+			else if (*pageItemId)
+				url = site->pageUrl + UrlEncode(pageItemId);
 			else
 				LOG_INFO("CodexPlanner: no %s id for item '%s' (%s); opening the planner without an item.",
 					site->name, uniqueItemName.c_str(), displayName.c_str());
