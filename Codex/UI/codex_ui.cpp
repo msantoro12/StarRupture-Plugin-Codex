@@ -48,6 +48,11 @@ namespace CodexUI
 		std::atomic<bool> g_restoreWaiting{ false };
 		std::atomic<bool> g_restoreRender{ false };
 
+		// The saved pin set as last read or written, kept so Clear on the config
+		// page, which empties the value, can put it back whether or not the pins
+		// are up yet. Render thread only.
+		std::string g_pinnedRecipesText;
+
 		void* g_inputCaptureToken = nullptr;
 		bool  g_escapeRegistered = false;
 
@@ -135,6 +140,7 @@ namespace CodexUI
 		void PlaceSearchBox(float fontScale);
 		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe, bool restoring = false);
 		void RestorePinnedRecipes(IModLoaderImGui* imgui);
+		void CommitPinnedRecipes();
 		void ArrangePins(IModLoaderImGui* imgui);
 		bool IsPinned(void* nativeRecipe);
 		bool HasFreePinSlot();
@@ -1520,6 +1526,16 @@ namespace CodexUI
 				return;
 			}
 
+			// Clear on the config page empties this too, but it only resets
+			// positions: the saved pins stay, so put their copy back. The
+			// loader writes the table's value to disk after this returns.
+			if (strcmp(key, "PinnedRecipes") == 0)
+			{
+				if (newValue[0] == '\0' && !g_pinnedRecipesText.empty())
+					CodexConfig::Config::SetPinnedRecipes(g_pinnedRecipesText.c_str());
+				return;
+			}
+
 			PinSettings next = g_pinSettings;
 			if (strcmp(key, "PinArrangement") == 0)
 				next.cascade = _stricmp(newValue, "Cascade") == 0;
@@ -1589,15 +1605,16 @@ namespace CodexUI
 		}
 
 		// Saves which recipes are pinned, in pin order. Called when the set
-		// changes (a pin, an unpin), never per frame. A Clear on the config page
-		// empties the saved copy and leaves the pins that are up.
+		// changes (a pin, an unpin), never per frame. Clear on the config page does
+		// not change it (see OnConfigChanged).
 		void CommitPinnedRecipes()
 		{
 			std::vector<std::string> keys;
 			const int count = PinCount();
 			for (int k = 0; k < count; ++k)
 				keys.push_back(g_pins[k].recipeKey);
-			CodexConfig::Config::SetPinnedRecipes(CodexPinSet::Format(keys, kPinnedRecipesBufferSize - 1).c_str());
+			g_pinnedRecipesText = CodexPinSet::Format(keys, kPinnedRecipesBufferSize - 1);
+			CodexConfig::Config::SetPinnedRecipes(g_pinnedRecipesText.c_str());
 		}
 
 		CodexPinLayout::Params PinLayoutParams(IModLoaderImGui* imgui)
@@ -2563,6 +2580,11 @@ namespace CodexUI
 		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 		LoadPinSettings();
 		RegisterPinSlots(self);
+		{
+			char text[kPinnedRecipesBufferSize];
+			CodexConfig::Config::GetPinnedRecipes(text, sizeof(text));
+			g_pinnedRecipesText = text;
+		}
 		g_restoreWaiting = true;
 		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 
