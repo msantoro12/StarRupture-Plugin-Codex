@@ -36,9 +36,9 @@ namespace CodexConfig
 		{
 			"Menu",
 			"PinArrangement",
-			ConfigValueType::String,
+			ConfigValueType::Choice,
 			"Tile",
-			"How pinned recipes sit under the first one: \"Tile\" or \"Cascade\""
+			"How pinned recipes sit under the first one|Tile|Cascade"
 		},
 		{
 			"Menu",
@@ -50,37 +50,37 @@ namespace CodexConfig
 		{
 			"Menu",
 			"SearchBoxX",
-			ConfigValueType::Float,
+			ConfigValueType::Hidden,
 			"-1",
-			"Horizontal centre of the search box as a fraction of the screen width; -1 centres it. Drag the box to set"
+			"Horizontal centre of the search box as a fraction of the screen width; -1 centres it. Set by dragging the box"
 		},
 		{
 			"Menu",
 			"SearchBoxY",
-			ConfigValueType::Float,
+			ConfigValueType::Hidden,
 			"-1",
-			"Top edge of the search box as a fraction of the screen height; -1 centres it. Drag the box to set"
+			"Top edge of the search box as a fraction of the screen height; -1 centres it. Set by dragging the box"
 		},
 		{
 			"Menu",
 			"PinTileOffset",
-			ConfigValueType::String,
+			ConfigValueType::Hidden,
 			"",
-			"Where the first pinned recipe was last dragged to while tiling, as a screen-fraction \"x,y\" (empty = not moved). Clear to reset"
+			"Where the first pinned recipe was last dragged to while tiling, as a screen-fraction \"x,y\" (empty = not moved)"
 		},
 		{
 			"Menu",
 			"PinCascadeOffset",
-			ConfigValueType::String,
+			ConfigValueType::Hidden,
 			"",
-			"Where the first pinned recipe was last dragged to while cascading, as a screen-fraction \"x,y\" (empty = not moved). Clear to reset"
+			"Where the first pinned recipe was last dragged to while cascading, as a screen-fraction \"x,y\" (empty = not moved)"
 		},
 		{
 			"Planner",
 			"Planner",
-			ConfigValueType::String,
+			ConfigValueType::Choice,
 			"StarRupture Planner",
-			"Planner the Launch planner button opens: \"StarRupture Planner\", \"starruptureplanner.com\", \"starrupturecalc.com\", \"starrupture-planner.com\" or \"Custom\""
+			"Planner the Launch planner button opens|StarRupture Planner|starruptureplanner.com|starrupturecalc.com|starrupture-planner.com|Custom"
 		},
 		{
 			"Planner",

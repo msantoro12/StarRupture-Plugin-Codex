@@ -70,10 +70,14 @@ namespace CodexUI
 		// placed for a frame after opening and then left to ImGui so it can
 		// be dragged. g_searchPos* is the top-left corner it was last placed
 		// or dropped at; a drop that changes it is saved to the config.
+		// g_searchSaved* is that saved spot as screen fractions (negative =
+		// centred), kept here so a Clear on the config page applies at once.
 		int   g_searchPlaceFrames = 0;
 		bool  g_searchPlaced = false;
 		float g_searchPosX = 0.0f;
 		float g_searchPosY = 0.0f;
+		float g_searchSavedX = -1.0f;
+		float g_searchSavedY = -1.0f;
 
 		// Last display size a Codex window rendered on - places the search
 		// box and pins on the frame they appear, before they can query it.
@@ -651,8 +655,7 @@ namespace CodexUI
 		// change.
 		void PlaceSearchBox(float fontScale)
 		{
-			float x = -1.0f, y = -1.0f;
-			CodexConfig::Config::GetSearchBoxPos(x, y);
+			const float x = g_searchSavedX, y = g_searchSavedY;
 			const bool saved = x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f;
 
 			g_searchHints.pos_x = (saved ? x : 0.5f) * g_displayW;
@@ -724,7 +727,9 @@ namespace CodexUI
 				{
 					g_searchPosX = posX;
 					g_searchPosY = posY;
-					CodexConfig::Config::SetSearchBoxPos((posX + sizeX * 0.5f) / g_displayW, posY / g_displayH);
+					g_searchSavedX = (posX + sizeX * 0.5f) / g_displayW;
+					g_searchSavedY = posY / g_displayH;
+					CodexConfig::Config::SetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 
 					// Dragging the box takes focus off the field; give it back so
 					// typing and Enter keep working.
@@ -1331,6 +1336,19 @@ namespace CodexUI
 			if (!section || !key || !newValue || strcmp(section, "Menu") != 0)
 				return;
 
+			// A cleared or hand-edited search box spot: re-place an open box.
+			const bool searchX = strcmp(key, "SearchBoxX") == 0;
+			if (searchX || strcmp(key, "SearchBoxY") == 0)
+			{
+				(searchX ? g_searchSavedX : g_searchSavedY) = static_cast<float>(atof(newValue));
+				if (g_searchVisible)
+				{
+					g_searchPlaceFrames = 1;
+					g_searchPlaced = false;
+				}
+				return;
+			}
+
 			PinSettings next = g_pinSettings;
 			if (strcmp(key, "PinArrangement") == 0)
 				next.cascade = _stricmp(newValue, "Cascade") == 0;
@@ -1831,6 +1849,7 @@ namespace CodexUI
 		if (g_closerWidget)
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
+		CodexConfig::Config::GetSearchBoxPos(g_searchSavedX, g_searchSavedY);
 		LoadPinSettings();
 		RegisterPinSlots(self);
 		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
