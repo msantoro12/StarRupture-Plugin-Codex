@@ -1206,9 +1206,9 @@ namespace CodexUI
 		// open (there only to windows that opt in, as the pins do) - so with
 		// only pins on screen, the game keeps every mouse/keyboard input.
 		// Whenever one of those is up (the Codex search/detail, the
-		// modloader's F2 overlay, the Escape menu) the first pin can be
-		// dragged and the others follow it, tiled or cascaded (Grouped), or
-		// every pin is dragged on its own (Ungrouped); the
+		// modloader's F2 overlay, the Escape menu) any pin can be dragged and
+		// the others follow it, tiled or cascaded (Grouped), or every pin is
+		// dragged on its own (Ungrouped); the
 		// Open/Launch planner/Unpin buttons only show while the Codex itself
 		// is open.
 		//
@@ -1265,7 +1265,8 @@ namespace CodexUI
 		PinSlot  g_pins[kMaxPins];
 
 		// How the pins are laid out, from the config. The lead pin (the one
-		// pinned first) is the only one the player moves; the rest follow it.
+		// pinned first) is the one that moves; a drag of any pin carries it,
+		// and the rest follow it.
 		// Each arrangement remembers where the lead was last dropped, as a
 		// fraction of the screen (its top-left corner) so it survives a
 		// resolution change. Written to the config when a drag ends, never
@@ -2238,7 +2239,7 @@ namespace CodexUI
 			imgui->GetWindowPos(&posX, &posY);
 
 			const bool pressed = imgui->IsMouseClicked(0, false);
-			if (pressed && imgui->IsWindowHovered(0))
+			if (pressed && imgui->IsWindowHovered(0) && !imgui->IsAnyItemHovered())
 			{
 				slot.dragging = true;
 				CancelPinGlides();
@@ -2370,7 +2371,7 @@ namespace CodexUI
 				// The rest follow the lead, which has already asked for their
 				// positions this frame. A press on one starts a drag of the group.
 				slot.applyFree = false;
-				if (imgui->IsMouseClicked(0, false) && imgui->IsWindowHovered(0))
+				if (imgui->IsMouseClicked(0, false) && imgui->IsWindowHovered(0) && !imgui->IsAnyItemHovered())
 				{
 					g_pinGrab.pending = true;
 					imgui->GetMousePos(&g_pinGrab.mouseX, &g_pinGrab.mouseY);
