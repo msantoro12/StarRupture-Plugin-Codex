@@ -17,3 +17,8 @@ PinLayout, Planner and PinArrangement are now dropdowns on the mod loader's conf
 The search box and pin positions are no longer config fields; a Saved state row with a Clear button puts them back at once
 Pins stay fully on screen at any resolution or font scale: tiles wrap to the side with room, a cascade takes shorter steps near the bottom, and a saved first-pin spot is kept on screen when the screen size changes
 Pins follow the first one with no lag while it is dragged, and cascaded pins keep their title bars in pin order
+Clicking a pinned recipe brings it to the front; its spot never changes
+New option PinGrouping: Grouped (default) keeps the pins together under the first one; Ungrouped lets you move every pin on its own, and dragging one never moves another
+Ungrouped, a new pin appears where the arrangement would put it next to the last pin when that spot is free and on screen, else at the next free spot, else at the default spot
+Ungrouped spots are kept between sessions (new option PinFreeOffsets) and re-fitted when the screen size changes; Clear and Arrange pins put the pins where they would go if just pinned
+Switching to Ungrouped leaves every pin where it is; switching back to Grouped puts the rest back under the first pin

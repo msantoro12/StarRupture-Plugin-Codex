@@ -49,6 +49,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"PinGrouping",
+			ConfigValueType::Choice,
+			"Grouped",
+			"Whether pinned recipes move together under the first one or each on its own|Grouped|Ungrouped"
+		},
+		{
+			"Menu",
 			"SearchBoxX",
 			ConfigValueType::Hidden,
 			"-1",
@@ -74,6 +81,13 @@ namespace CodexConfig
 			ConfigValueType::Hidden,
 			"",
 			"Where the first pinned recipe was last dragged to while cascading, as a screen-fraction \"x,y\" (empty = not moved)"
+		},
+		{
+			"Menu",
+			"PinFreeOffsets",
+			ConfigValueType::Hidden,
+			"",
+			"Where each pinned recipe was last placed while ungrouped, as screen-fraction \"x,y\" pairs separated by \";\", in pin order (empty = not placed)"
 		},
 		{
 			"Planner",
@@ -193,6 +207,29 @@ namespace CodexConfig
 		static bool GetPinGap()
 		{
 			return s_self ? s_self->config->ReadBool(s_self, "Menu", "PinGap", true) : true;
+		}
+
+		// Returns the current pin grouping ("Grouped" or "Ungrouped").
+		static const char* GetPinGrouping()
+		{
+			static char buffer[32];
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "PinGrouping", buffer, sizeof(buffer), "Grouped"))
+				return buffer;
+			return "Grouped";
+		}
+
+		// Saved positions of the pins while ungrouped: "x,y" screen fractions of each
+		// pin's top-left corner, separated by ";", in pin order; empty means none saved.
+		static void GetPinFreeOffsets(char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinFreeOffsets", out, maxLen, ""))
+				out[0] = '\0';
+		}
+
+		static void SetPinFreeOffsets(const char* offsets)
+		{
+			if (s_self)
+				s_self->config->WriteString(s_self, "Menu", "PinFreeOffsets", offsets);
 		}
 
 		// Saved position of the first pin for the tile or cascade arrangement: an "x,y"

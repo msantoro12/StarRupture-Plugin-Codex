@@ -38,7 +38,12 @@ loader the plugin shows "Needs loader" and stays off.
   Cascade each remember where you dropped the first pin, across sessions. Only the first pin
   moves by hand: if you unpin it, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
-  and puts the pins back on the edge. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
+  and puts the pins back on the edge. Clicking a pin brings it to the front without moving
+  anything. Set `PinGrouping` to `Ungrouped` and every pin is moved by hand on its own,
+  and dragging one never moves another; a new pin appears where the arrangement would put it
+  next to the last pin when that spot is free and on screen, else at the next free spot of the
+  arrangement, else at the default spot. Switching to `Ungrouped` leaves every pin where it is;
+  switching back to `Grouped` puts the rest back under the first pin. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
 - **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
   Open and Unpin) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -49,13 +54,13 @@ loader the plugin shows "Needs loader" and stays off.
   an item. For any other planner, set `Planner` to `Custom` and give `CustomUrlTemplate` an
   address with `{item}`, `{name}` or `{game}`.
 - **Configurable** -- enable/disable the plugin, rebind the keys and choose the pin layout
-  from the mod loader's config page or config file. `Planner` and `PinArrangement` are
-  dropdowns there.
+  from the mod loader's config page or config file. `Planner`, `PinLayout`, `PinArrangement`
+  and `PinGrouping` are dropdowns there.
 
 ## Configuration
 
 Settings are written to the plugin's config file on first run and can be edited there.
-On the mod loader's config page, `Planner` and `PinArrangement` are dropdowns. The search
+On the mod loader's config page, `Planner`, `PinLayout`, `PinArrangement` and `PinGrouping` are dropdowns. The search
 box and pin positions have no field: the **Saved state** row at the end of the `Menu`
 section has a **Clear** button that puts the search box back in the centre and the pins back
 on their edge at once, even with the search box open. Values already in your config file
@@ -71,12 +76,14 @@ them as plain text fields.
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
+| `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` or `Ungrouped` (dropdown) |
 | `Menu` | `PinGap` | `true` | Leave a gap between tiled pins; off packs them edge to edge |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` (dropdown) |
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
 | `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
+| `Menu` | `PinFreeOffsets` | empty | Where each pin was last placed while ungrouped, as `x,y` screen fractions separated by `;`, in pin order. Set by dragging a pin or pinning one. No field on the config page; Clear resets it and puts the pins where they would go if just pinned |
 | `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it. No field on the config page; Clear resets it |
 
 ---

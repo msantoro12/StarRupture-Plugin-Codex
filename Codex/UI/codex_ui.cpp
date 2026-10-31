@@ -115,7 +115,6 @@ namespace CodexUI
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
 		constexpr int kTabItemFlagsSetSelected = 1 << 1;
 		constexpr int kWindowFlagsAlwaysAutoResize = 1 << 6;
-		constexpr int kWindowFlagsNoBringToFrontOnFocus = 1 << 13;
 		constexpr int kMouseCursorResizeAll = 2;
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
@@ -1195,7 +1194,8 @@ namespace CodexUI
 		// only pins on screen, the game keeps every mouse/keyboard input.
 		// Whenever one of those is up (the Codex search/detail, the
 		// modloader's F2 overlay, the Escape menu) the first pin can be
-		// dragged and the others follow it, tiled or cascaded; the
+		// dragged and the others follow it, tiled or cascaded (Grouped), or
+		// every pin is dragged on its own (Ungrouped); the
 		// Open/Launch planner/Unpin buttons only show while the Codex itself
 		// is open.
 		//
@@ -1229,6 +1229,8 @@ namespace CodexUI
 			float             dragFromY = 0.0f;
 			float             grabX = 0.0f; // where in the window the drag took hold
 			float             grabY = 0.0f;
+			bool              placePending = false; // ungrouped: a new pin waiting for its size to be placed
+			bool              applyFree = false;    // ungrouped: put the window at its saved spot
 		};
 
 		PinSlot  g_pins[kMaxPins];
@@ -1254,6 +1256,8 @@ namespace CodexUI
 			PinEdge   edge = PinEdge::Right;
 			bool      gap = true;
 			PinAnchor anchors[2]; // indexed by `cascade`
+			bool      free = false; // ungrouped: every pin has its own spot
+			PinAnchor freeAnchors[kMaxPins]; // ungrouped: each pin's spot, in pin order
 		};
 
 		PinSettings g_pinSettings;
@@ -1269,8 +1273,18 @@ namespace CodexUI
 		float g_pinAnchoredH = 0.0f;
 		float g_pinAnchoredLeadW = 0.0f; // the lead's width when it was last placed
 
+		// Ungrouped, set when the pin grouping was changed, when the saved spots
+		// were edited by hand, or when they were cleared (every pin is placed
+		// again as if just pinned). The first pin's render acts on them.
+		bool g_pinModeChanged = false;
+		bool g_pinApplyFree = false;
+		bool g_pinRespawn = false;
+
 		// One "0.1234,0.5678" entry, with room to spare.
 		constexpr int kPinOffsetBufferSize = 32;
+
+		// All the ungrouped entries, joined with ";".
+		constexpr int kPinFreeOffsetsBufferSize = kPinOffsetBufferSize * kMaxPins;
 
 		// A drop that moves the window less than this is a click, not a drag.
 		constexpr float kPinDragThreshold = 0.5f;
@@ -1305,17 +1319,75 @@ namespace CodexUI
 				: PinEdge::Right;
 		}
 
+		// The ungrouped spots as "x,y;x,y;..." in pin order; an unset spot is an
+		// empty entry, and nothing set at all is an empty string.
+		void ParsePinFreeAnchors(const char* text, PinAnchor* out)
+		{
+			for (int k = 0; k < kMaxPins; ++k)
+			{
+				out[k] = ParsePinAnchor(text);
+				const char* next = strchr(text, ';');
+				text = next ? next + 1 : "";
+			}
+		}
+
+		void FormatPinFreeAnchors(const PinAnchor* anchors, char* text, int size)
+		{
+			int last = -1;
+			for (int k = 0; k < kMaxPins; ++k)
+				if (anchors[k].set)
+					last = k;
+
+			text[0] = '\0';
+			int used = 0;
+			for (int k = 0; k <= last && used < size; ++k)
+			{
+				if (anchors[k].set)
+					used += snprintf(text + used, size - used, "%s%.4f,%.4f", k ? ";" : "", anchors[k].x, anchors[k].y);
+				else
+					used += snprintf(text + used, size - used, "%s", k ? ";" : "");
+			}
+		}
+
+		bool SamePinAnchor(const PinAnchor& a, const PinAnchor& b)
+		{
+			return a.set == b.set && a.x == b.x && a.y == b.y;
+		}
+
 		// Takes up new pin options. A change to the arrangement, the edge or
 		// the current arrangement's anchor moves the lead pin to match.
 		void ApplyPinSettings(const PinSettings& next)
 		{
-			const PinAnchor& before = g_pinSettings.anchors[next.cascade ? 1 : 0];
-			const PinAnchor& after = next.anchors[next.cascade ? 1 : 0];
-			if (next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge ||
-				after.set != before.set || after.x != before.x || after.y != before.y)
+			if (!SamePinAnchor(next.anchors[next.cascade ? 1 : 0], g_pinSettings.anchors[next.cascade ? 1 : 0]) ||
+				next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge)
 				g_pinReanchor = true;
 
+			if (next.free != g_pinSettings.free)
+				g_pinModeChanged = true;
+
+			bool anySet = false, wasSet = false, changed = false;
+			for (int k = 0; k < kMaxPins; ++k)
+			{
+				anySet = anySet || next.freeAnchors[k].set;
+				wasSet = wasSet || g_pinSettings.freeAnchors[k].set;
+				changed = changed || !SamePinAnchor(next.freeAnchors[k], g_pinSettings.freeAnchors[k]);
+			}
+			if (changed && !anySet && wasSet)
+				g_pinRespawn = true; // cleared
+			else if (changed)
+				g_pinApplyFree = true; // edited by hand
+
 			g_pinSettings = next;
+		}
+
+		// Saves the ungrouped spots. The in-memory copy is read back from the
+		// text that was written, so the config's own change notice finds it equal.
+		void CommitPinFreeAnchors()
+		{
+			char text[kPinFreeOffsetsBufferSize];
+			FormatPinFreeAnchors(g_pinSettings.freeAnchors, text, sizeof(text));
+			ParsePinFreeAnchors(text, g_pinSettings.freeAnchors);
+			CodexConfig::Config::SetPinFreeOffsets(text);
 		}
 
 		// Reads every pin option from the config, at startup.
@@ -1327,6 +1399,10 @@ namespace CodexUI
 			next.gap = CodexConfig::Config::GetPinGap();
 			next.anchors[0] = ReadPinAnchor(false);
 			next.anchors[1] = ReadPinAnchor(true);
+			next.free = _stricmp(CodexConfig::Config::GetPinGrouping(), "Ungrouped") == 0;
+			char text[kPinFreeOffsetsBufferSize];
+			CodexConfig::Config::GetPinFreeOffsets(text, sizeof(text));
+			ParsePinFreeAnchors(text, next.freeAnchors);
 			ApplyPinSettings(next);
 		}
 
@@ -1361,6 +1437,10 @@ namespace CodexUI
 				next.anchors[0] = ParsePinAnchor(newValue);
 			else if (strcmp(key, "PinCascadeOffset") == 0)
 				next.anchors[1] = ParsePinAnchor(newValue);
+			else if (strcmp(key, "PinGrouping") == 0)
+				next.free = _stricmp(newValue, "Ungrouped") == 0;
+			else if (strcmp(key, "PinFreeOffsets") == 0)
+				ParsePinFreeAnchors(newValue, next.freeAnchors);
 			else
 				return;
 
@@ -1494,10 +1574,163 @@ namespace CodexUI
 			}
 		}
 
+		// Asks for a pin's window to be put at `at`; applied by its next Begin.
+		void RequestPinPos(PinSlot& slot, CodexPinLayout::Point at)
+		{
+			slot.hints.pivot_x = 0.0f;
+			slot.hints.pivot_y = 0.0f;
+			slot.hints.pos_cond = 0;
+			slot.hints.pos_x = at.x;
+			slot.hints.pos_y = at.y;
+		}
+
+		// Ungrouped: remembers where pin `index` sits, as a screen fraction.
+		void SetPinFreeAnchor(const CodexPinLayout::Params& params, int index, CodexPinLayout::Point at)
+		{
+			const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, at);
+			g_pinSettings.freeAnchors[index] = { fraction.x, fraction.y, true };
+		}
+
+		// Ungrouped, first pin's render. Acts on a changed grouping, hand-edited
+		// or cleared spots and a new screen size before any pin begins, so the
+		// requests are in place for all of them in the same frame.
+		void UpdatePinGrouping(IModLoaderImGui* imgui)
+		{
+			const int count = PinCount();
+			const CodexPinLayout::Params params = PinLayoutParams(imgui);
+
+			if (g_pinModeChanged)
+			{
+				g_pinModeChanged = false;
+				if (g_pinSettings.free)
+				{
+					// Grouped to ungrouped: each pin keeps the spot it has.
+					for (int k = 0; k < count; ++k)
+					{
+						if (g_pins[k].rect.valid)
+							SetPinFreeAnchor(params, k, { g_pins[k].rect.x, g_pins[k].rect.y });
+						else
+							g_pins[k].placePending = true;
+						g_pins[k].applyFree = false;
+					}
+					CommitPinFreeAnchors();
+				}
+				// Ungrouped to grouped: the lead stays where it is and the rest
+				// snap back under it (PlacePins).
+			}
+
+			if (!g_pinSettings.free)
+			{
+				// Edits to the ungrouped spots made meanwhile do not move pins that
+				// are about to keep the spots they have.
+				g_pinApplyFree = g_pinRespawn = false;
+				return;
+			}
+
+			// The screen size is tracked here too, so a switch back to grouped
+			// does not take it for a change and move the lead.
+			const bool resized = g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH;
+			g_pinAnchoredW = g_displayW;
+			g_pinAnchoredH = g_displayH;
+			g_pinAnchoredLeadW = g_pins[0].rect.w;
+			g_pinReanchor = false;
+
+			if (g_pinRespawn)
+			{
+				g_pinRespawn = false;
+				CodexPinLayout::Size sizes[kMaxPins];
+				CodexPinLayout::Point at[kMaxPins];
+				bool known = true;
+				for (int k = 0; k < count; ++k)
+				{
+					known = known && g_pins[k].rect.valid;
+					sizes[k] = { g_pins[k].rect.w, g_pins[k].rect.h };
+				}
+				if (known)
+				{
+					CodexPinLayout::SpawnAll(params, sizes, count, at);
+					for (int k = 0; k < count; ++k)
+					{
+						SetPinFreeAnchor(params, k, at[k]);
+						RequestPinPos(g_pins[k], at[k]);
+						g_pins[k].placePending = false;
+						g_pins[k].applyFree = false;
+					}
+					CommitPinFreeAnchors();
+				}
+				else
+					g_pinRespawn = true;
+			}
+			else if (g_pinApplyFree || resized)
+			{
+				g_pinApplyFree = false;
+				for (int k = 0; k < count; ++k)
+					g_pins[k].applyFree = true;
+			}
+		}
+
+		// Ungrouped, every pin's render: puts a new pin where PlaceNew says,
+		// puts a pin back at its saved spot, or keeps one that was resized
+		// (the Codex opening shows the buttons) on screen.
+		void PlaceFreePin(IModLoaderImGui* imgui, int index, PinSlot& slot)
+		{
+			if (!slot.rect.valid)
+				return;
+
+			const CodexPinLayout::Params params = PinLayoutParams(imgui);
+			const CodexPinLayout::Size size{ slot.rect.w, slot.rect.h };
+
+			if (slot.placePending)
+			{
+				slot.placePending = false;
+				slot.applyFree = false;
+				CodexPinLayout::Point at;
+				const PinAnchor& saved = g_pinSettings.freeAnchors[index];
+				if (index == 0)
+				{
+					at = saved.set ? CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y)
+								   : CodexPinLayout::DefaultLead(params, size);
+				}
+				else
+				{
+					CodexPinLayout::Size sizes[kMaxPins];
+					CodexPinLayout::Point spots[kMaxPins];
+					for (int k = 0; k < index; ++k)
+					{
+						sizes[k] = { g_pins[k].rect.w, g_pins[k].rect.h };
+						spots[k] = { g_pins[k].rect.x, g_pins[k].rect.y };
+					}
+					at = CodexPinLayout::PlaceNew(params, sizes, spots, index, size);
+				}
+				SetPinFreeAnchor(params, index, at);
+				RequestPinPos(slot, at);
+				CommitPinFreeAnchors();
+			}
+			else if (slot.applyFree)
+			{
+				slot.applyFree = false;
+				const PinAnchor& saved = g_pinSettings.freeAnchors[index];
+				if (saved.set)
+					RequestPinPos(slot, CodexPinLayout::LeadFromFraction(params, size, saved.x, saved.y));
+			}
+			else if (!slot.dragging)
+			{
+				const CodexPinLayout::Point at = CodexPinLayout::ClampToScreen(params, size, { slot.rect.x, slot.rect.y });
+				if (CodexPinLayout::LeadNeedsRequest(false, at, { slot.rect.x, slot.rect.y }, kPinDragThreshold))
+					RequestPinPos(slot, at);
+			}
+		}
+
 		// Puts the pins back on the configured edge: forgets where the lead
 		// was dropped for the current arrangement.
 		void ArrangePins(IModLoaderImGui* imgui)
 		{
+			if (g_pinSettings.free)
+			{
+				g_pinRespawn = true;
+				return;
+			}
+
 			const bool cascade = g_pinSettings.cascade;
 			g_pinSettings.anchors[cascade ? 1 : 0] = PinAnchor{};
 			WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
@@ -1530,7 +1763,17 @@ namespace CodexUI
 			slot.nativeRecipe = nativeRecipe;
 			TitleSlot(index, info.displayName.c_str());
 
+			// Nothing to move yet: changes made while no pin was up are already in effect.
 			if (index == 0)
+				g_pinModeChanged = g_pinApplyFree = g_pinRespawn = false;
+
+			if (g_pinSettings.free)
+			{
+				// Placed once its window has a size.
+				slot.placePending = true;
+				slot.applyFree = false;
+			}
+			else if (index == 0)
 				AnchorLead(imgui, slot);
 
 			if (g_self && g_self->hooks->UI)
@@ -1552,6 +1795,13 @@ namespace CodexUI
 				g_pins[k].nativeRecipe = g_pins[k + 1].nativeRecipe;
 				g_pins[k].rect = g_pins[k + 1].rect;
 				g_pins[k].dragging = false;
+				g_pins[k].placePending = g_pins[k + 1].placePending;
+				if (g_pinSettings.free)
+				{
+					// This slot's window moves to the next pin's spot.
+					g_pins[k].applyFree = true;
+					g_pinSettings.freeAnchors[k] = g_pinSettings.freeAnchors[k + 1];
+				}
 				if (CodexRecipes::FindByNativeRecipe(g_pins[k].nativeRecipe, info))
 					TitleSlot(k, info.displayName.c_str());
 				else
@@ -1565,13 +1815,21 @@ namespace CodexUI
 			last.nativeRecipe = nullptr;
 			last.rect = PinRect{};
 			last.dragging = false;
+			last.placePending = false;
+			last.applyFree = false;
+			if (g_pinSettings.free)
+			{
+				g_pinSettings.freeAnchors[count - 1] = PinAnchor{};
+				CommitPinFreeAnchors();
+			}
 			if (g_self && g_self->hooks->UI && last.widget)
 				g_self->hooks->UI->SetWidgetVisible(last.widget, false);
 		}
 
-		// Saves the lead's position as the current arrangement's anchor once,
-		// when a drag that moved its window ends.
-		void SaveLeadIfDragged(IModLoaderImGui* imgui, PinSlot& slot)
+		// Follows a drag of a pin's window and, once, when a drag that moved it
+		// ends, saves its position: as the current arrangement's anchor for the
+		// lead, or as the pin's own spot when ungrouped.
+		void SaveDraggedPin(IModLoaderImGui* imgui, int index, PinSlot& slot)
 		{
 			float posX = 0.0f, posY = 0.0f;
 			imgui->GetWindowPos(&posX, &posY);
@@ -1605,12 +1863,20 @@ namespace CodexUI
 				slot.dragging = false;
 				if (std::fabs(posX - slot.dragFromX) > kPinDragThreshold || std::fabs(posY - slot.dragFromY) > kPinDragThreshold)
 				{
-					imgui->GetDisplaySize(&g_displayW, &g_displayH);
-					// Clamped so a lead dropped partly off the screen is still restored.
-					const bool cascade = g_pinSettings.cascade;
-					g_pinSettings.anchors[cascade ? 1 : 0] =
-						{ std::clamp(posX / g_displayW, 0.0f, 1.0f), std::clamp(posY / g_displayH, 0.0f, 1.0f), true };
-					WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
+					// Clamped so a pin dropped partly off the screen is still restored.
+					const CodexPinLayout::Params params = PinLayoutParams(imgui);
+					if (g_pinSettings.free)
+					{
+						SetPinFreeAnchor(params, index, { posX, posY });
+						CommitPinFreeAnchors();
+					}
+					else
+					{
+						const bool cascade = g_pinSettings.cascade;
+						const CodexPinLayout::Point fraction = CodexPinLayout::ToFraction(params, { posX, posY });
+						g_pinSettings.anchors[cascade ? 1 : 0] = { fraction.x, fraction.y, true };
+						WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
+					}
 				}
 			}
 		}
@@ -1632,11 +1898,23 @@ namespace CodexUI
 
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
 
+			// Clicking a pin brings it to the front, in either grouping; a click
+			// never changes a position.
 			if (index == 0)
+				UpdatePinGrouping(imgui);
+
+			if (g_pinSettings.free)
 			{
-				// The lead stays at the back of the stack, so clicking or dragging
-				// it does not raise it over the title bars of a cascade.
-				slot.hints.extra_window_flags = kPinWindowFlags | kWindowFlagsNoBringToFrontOnFocus;
+				// Every pin is moved by hand and never moves another.
+				slot.hints.extra_window_flags = kPinWindowFlags;
+				PlaceFreePin(imgui, index, slot);
+				SaveDraggedPin(imgui, index, slot);
+				ShowDragCursor(imgui);
+			}
+			else if (index == 0)
+			{
+				slot.hints.extra_window_flags = kPinWindowFlags;
+				slot.applyFree = false;
 
 				// On the Right edge the lead keeps its right edge when its window
 				// grows, as it does when the Codex opens and the buttons show.
@@ -1645,7 +1923,7 @@ namespace CodexUI
 				if (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
 					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW))
 					AnchorLead(imgui, slot);
-				SaveLeadIfDragged(imgui, slot);
+				SaveDraggedPin(imgui, 0, slot);
 				PlacePins(imgui, slot);
 				ShowDragCursor(imgui);
 			}
@@ -1653,8 +1931,8 @@ namespace CodexUI
 			{
 				// Only the lead is moved by hand; the rest follow it, and the lead
 				// has already asked for their positions this frame.
-				// Not raised by a click either: the windows keep the order they were created in.
-				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove | kWindowFlagsNoBringToFrontOnFocus;
+				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove;
+				slot.applyFree = false;
 			}
 
 			const bool interactive = CodexUIActive(imgui);
@@ -1748,8 +2026,7 @@ namespace CodexUI
 				slot.hints.pos_y  = -1.0f;
 				slot.hints.size_cond = 0;
 				slot.hints.pos_cond  = 0;
-				// The first slot is always the lead, created first and kept at the back.
-				slot.hints.extra_window_flags = i == 0 ? kPinWindowFlags | kWindowFlagsNoBringToFrontOnFocus : kPinWindowFlags;
+				slot.hints.extra_window_flags = kPinWindowFlags;
 
 				slot.desc.name        = slot.title;
 				slot.desc.renderFn    = kPinRenderFns[i];

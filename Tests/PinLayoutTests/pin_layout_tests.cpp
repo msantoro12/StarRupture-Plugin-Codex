@@ -419,6 +419,265 @@ int main()
 		Check(LeadNeedsRequest(false, { 100, 100 }, { 100, 140 }, 0.5f), "a drifted lead is asked to move", "no request");
 	}
 
+	// 9. Ungrouped spawn (PlaceNew). A new pin goes where the arrangement would
+	//    put it next to the most recently placed pin, when that is fully on
+	//    screen and covers no pin; otherwise at the next free arrangement slot;
+	//    otherwise at the default spot.
+	printf("ungrouped spawn\n");
+	{
+		// Next to the last pin: exactly where the arrangement says, on every
+		// resolution, edge, arrangement, gap and font scale.
+		int roomy = 0;
+		for (const Resolution& res : kResolutions)
+		for (float fontScale : { 1.0f, 2.0f })
+		for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+		for (bool cascade : { false, true })
+		for (bool gap : { true, false })
+		{
+			Case c{ &res, fontScale, edge, cascade, gap, 2, "mid", {} };
+			const Params p = MakeParams(c);
+			const Size lead{ 280 * fontScale, 150 * fontScale };
+			const Size fresh{ 300 * fontScale, 120 * fontScale };
+			const Point leadAt{ res.w * 0.45f, res.h * 0.08f };
+			const float spacing = gap ? p.step - p.frame : 0.0f;
+			Point want;
+			if (cascade)
+				want = { leadAt.x + (edge == Edge::Right ? -p.step : p.step), leadAt.y + p.step };
+			else if (edge == Edge::Top)
+				want = { leadAt.x + lead.w + spacing, leadAt.y };
+			else
+				want = { edge == Edge::Right ? leadAt.x + lead.w - fresh.w : leadAt.x, leadAt.y + lead.h + spacing };
+
+			const Point got = PlaceNew(p, &lead, &leadAt, 1, fresh);
+			const bool fits = want.x >= 0 && want.y >= 0 && want.x + fresh.w <= res.w && want.y + fresh.h <= res.h;
+			if (fits)
+			{
+				++roomy;
+				Check(std::fabs(got.x - want.x) < 0.01f && std::fabs(got.y - want.y) < 0.01f, "a new pin goes where the arrangement puts it next to the last pin", Describe(c));
+			}
+			Check(got.x >= 0 && got.y >= 0 && got.x + fresh.w <= res.w + 0.01f && got.y + fresh.h <= res.h + 0.01f, "a new pin is fully on screen", Describe(c));
+		}
+		printf("  %d next-to-last placements checked\n", roomy);
+
+		// The last pin is the reference, not the first: three pins, the third
+		// one is the one the fourth lines up with.
+		{
+			Case c{ &kResolutions[1], 1.0f, Edge::Left, false, true, 3, "mid", {} };
+			const Params p = MakeParams(c);
+			const Size sizes[3] = { { 280, 150 }, { 300, 120 }, { 260, 190 } };
+			const Point at[3] = { { 100, 100 }, { 600, 100 }, { 1000, 200 } };
+			const Point got = PlaceNew(p, sizes, at, 3, { 320, 110 });
+			Check(got.x == 1000 && std::fabs(got.y - (200 + 190 + (p.step - p.frame))) < 0.01f, "the most recently placed pin is the reference", Describe(c));
+		}
+
+		// No room below the last pin: the next free slot, not on top of a pin.
+		int fallbacks = 0;
+		for (const Resolution& res : kResolutions)
+		for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+		for (bool cascade : { false, true })
+		{
+			Case c{ &res, 1.0f, edge, cascade, true, 2, "bottom-right", {} };
+			const Params p = MakeParams(c);
+			const Size sizes[2] = { { 280, 150 }, { 300, 120 } };
+			const Point at[2] = { { res.w - 280 - 4.0f, 200 }, { res.w - 300 - 4.0f, res.h - 120 - 4.0f } };
+			const Size fresh{ 260, 190 };
+			const Point direct = detail::Beside(p, at[1], sizes[1], fresh);
+			const Point got = PlaceNew(p, sizes, at, 2, fresh);
+			Check(!detail::Free(p, sizes, at, 2, direct, fresh), "the setup leaves no room next to the last pin", Describe(c));
+			Check(detail::Free(p, sizes, at, 2, got, fresh), "no room next to the last pin: the fallback is on screen and covers no pin", Describe(c));
+			Check(got.x != direct.x || got.y != direct.y, "no room next to the last pin: it goes elsewhere", Describe(c));
+			++fallbacks;
+		}
+		printf("  %d no-room fallbacks checked\n", fallbacks);
+
+		// No room anywhere: the default spot, still on screen.
+		for (const Resolution& res : kResolutions)
+		for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+		for (bool cascade : { false, true })
+		{
+			Case c{ &res, 1.0f, edge, cascade, true, 1, "full", {} };
+			const Params p = MakeParams(c);
+			const Size big{ res.w - 20.0f, res.h - 20.0f };
+			const Point where{ 10.0f, 10.0f };
+			const Size fresh{ 300, 200 };
+			const Point got = PlaceNew(p, &big, &where, 1, fresh);
+			const Point def = DefaultLead(p, fresh);
+			// A cascade only needs the title bar clear, so it may still find a spot
+			// in front of the big window; a tile has none.
+			if (!cascade)
+				Check(got.x == def.x && got.y == def.y, "no free spot anywhere: the default spot", Describe(c));
+			Check(got.x >= 0 && got.y >= 0 && got.x + fresh.w <= res.w + 0.01f && got.y + fresh.h <= res.h + 0.01f, "the default spot is on screen", Describe(c));
+		}
+
+		// Pins dragged anywhere: the answer is a free, on-screen spot, or the default.
+		unsigned seed = 777u;
+		auto next = [&seed](float lo, float hi) {
+			seed = seed * 1664525u + 1013904223u;
+			return lo + (hi - lo) * static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f;
+		};
+		int fuzzed = 0, defaults = 0;
+		for (const Resolution& res : kResolutions)
+		for (int round = 0; round < 600; ++round)
+		{
+			const float fontScale = round % 2 ? 2.0f : 1.0f;
+			const int count = 1 + round % (kMaxPins - 1);
+			Case c{ &res, fontScale, static_cast<Edge>(round % 3), round % 5 == 4, round % 2 == 0, count, "random", {} };
+			const Params p = MakeParams(c);
+			Size sizes[kMaxPins];
+			Point at[kMaxPins];
+			for (int k = 0; k < count; ++k)
+			{
+				sizes[k] = { next(120.0f, 500.0f), next(100.0f, 300.0f) };
+				at[k] = ClampToScreen(p, sizes[k], { next(0.0f, res.w), next(0.0f, res.h) });
+			}
+			const Size fresh{ next(120.0f, 500.0f), next(100.0f, 300.0f) };
+			const Point got = PlaceNew(p, sizes, at, count, fresh);
+			const Point def = DefaultLead(p, fresh);
+			const bool isDefault = got.x == def.x && got.y == def.y;
+			defaults += isDefault ? 1 : 0;
+			Check(isDefault || detail::Free(p, sizes, at, count, got, fresh), "a new pin lands on a free spot or the default", Describe(c));
+			Check(got.x >= -0.01f && got.y >= -0.01f && got.x + fresh.w <= res.w + 0.01f && got.y + fresh.h <= res.h + 0.01f, "a new pin lands on screen", Describe(c));
+			++fuzzed;
+		}
+		printf("  %d random spawns checked (%d fell back to the default spot)\n", fuzzed, defaults);
+
+		// Pinning one after the other with nobody dragged: every pin on screen,
+		// no tile covering another when the screen has room.
+		int sequences = 0;
+		for (const Resolution& res : kResolutions)
+		for (float fontScale : { 1.0f, 2.0f })
+		for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+		for (bool cascade : { false, true })
+		for (bool gap : { true, false })
+		for (int count = 1; count <= kMaxPins; ++count)
+		{
+			Case c{ &res, fontScale, edge, cascade, gap, count, "default", {} };
+			const Params p = MakeParams(c);
+			Size sizes[kMaxPins];
+			float area = 0.0f;
+			for (int k = 0; k < count; ++k)
+			{
+				sizes[k] = { kBasePins[k].w * fontScale, kBasePins[k].h * fontScale };
+				area += sizes[k].w * sizes[k].h;
+			}
+			Point at[kMaxPins];
+			SpawnAll(p, sizes, count, at);
+			bool inside = true;
+			for (int k = 0; k < count; ++k)
+				inside = inside && at[k].x >= -0.01f && at[k].y >= -0.01f && at[k].x + sizes[k].w <= res.w + 0.01f && at[k].y + sizes[k].h <= res.h + 0.01f;
+			Check(inside, "pins pinned one after the other are all on screen", Describe(c));
+			if (!cascade && area < 0.2f * res.w * res.h)
+				Check(Overlaps(sizes, at, count) == 0, "pins pinned one after the other do not overlap when the screen has room", Describe(c));
+			++sequences;
+		}
+		printf("  %d pin-after-pin sequences checked\n", sequences);
+	}
+
+	// 10. Ungrouped positions are saved as screen fractions and re-clamped when
+	//     the screen size changes, as a grouped lead's are.
+	printf("ungrouped saved spots\n");
+	{
+		unsigned seed = 4242u;
+		auto next = [&seed](float lo, float hi) {
+			seed = seed * 1664525u + 1013904223u;
+			return lo + (hi - lo) * static_cast<float>((seed >> 8) & 0xFFFF) / 65535.0f;
+		};
+		int checked = 0;
+		for (const Resolution& from : kResolutions)
+		for (const Resolution& to : kResolutions)
+		for (int round = 0; round < 50; ++round)
+		{
+			Case c{ &from, 1.0f, Edge::Right, false, true, 1, "saved", {} };
+			const Params saved = MakeParams(c);
+			Case d{ &to, 1.0f, Edge::Right, false, true, 1, "restored", {} };
+			const Params now = MakeParams(d);
+			const Size size{ next(150.0f, 600.0f), next(100.0f, 400.0f) };
+			const Point at = ClampToScreen(saved, size, { next(0.0f, from.w), next(0.0f, from.h) });
+
+			const Point fraction = ToFraction(saved, at);
+			Check(fraction.x >= 0.0f && fraction.x <= 1.0f && fraction.y >= 0.0f && fraction.y <= 1.0f, "a saved fraction is inside the screen", Describe(c));
+
+			// Written with four decimals, as the config text is.
+			char text[64];
+			snprintf(text, sizeof(text), "%.4f,%.4f", fraction.x, fraction.y);
+			float fx = 0.0f, fy = 0.0f;
+			sscanf(text, "%f,%f", &fx, &fy);
+
+			const Point back = LeadFromFraction(now, size, fx, fy);
+			Check(back.x >= 0.0f && back.y >= 0.0f && back.x + size.w <= to.w + 0.01f && back.y + size.h <= to.h + 0.01f, "a saved ungrouped spot is re-clamped to the new screen", Describe(d));
+			if (&from == &to)
+				Check(std::fabs(back.x - at.x) < 0.5f && std::fabs(back.y - at.y) < 0.5f, "a saved spot comes back at the same size", Describe(c));
+			++checked;
+		}
+		printf("  %d saved spots checked\n", checked);
+
+		// Another pin placed does not move the pins already up.
+		Case c{ &kResolutions[1], 1.0f, Edge::Right, false, true, 2, "fixed", {} };
+		const Params p = MakeParams(c);
+		const Size sizes[2] = { { 280, 150 }, { 300, 120 } };
+		const Point before[2] = { { 400, 300 }, { 900, 500 } };
+		Point copy[2] = { before[0], before[1] };
+		PlaceNew(p, sizes, copy, 2, { 260, 190 });
+		Check(copy[0].x == before[0].x && copy[0].y == before[0].y && copy[1].x == before[1].x && copy[1].y == before[1].y,
+			"placing a new pin leaves the others where they are", Describe(c));
+	}
+
+	// 11. Switching groupings. Grouped to ungrouped: each pin keeps the spot it
+	//     has. Ungrouped to grouped: the lead stays and the rest snap back under
+	//     it.
+	printf("switching\n");
+	{
+		int switched = 0;
+		for (const Resolution& res : kResolutions)
+		for (float fontScale : { 1.0f, 2.0f })
+		for (Edge edge : { Edge::Right, Edge::Left, Edge::Top })
+		for (bool cascade : { false, true })
+		for (int count = 2; count <= kMaxPins; count += 2)
+		{
+			Case c{ &res, fontScale, edge, cascade, true, count, "default", {} };
+			const Params p = MakeParams(c);
+			Size sizes[kMaxPins];
+			for (int k = 0; k < count; ++k)
+				sizes[k] = { kBasePins[k].w * fontScale, kBasePins[k].h * fontScale };
+
+			// Grouped layout, then switched to ungrouped: every spot is saved as it is.
+			Point grouped[kMaxPins];
+			Arrange(p, sizes, count, DefaultLead(p, sizes[0]), grouped);
+			bool kept = true;
+			for (int k = 0; k < count; ++k)
+			{
+				const Point f = ToFraction(p, grouped[k]);
+				char text[64];
+				snprintf(text, sizeof(text), "%.4f,%.4f", f.x, f.y);
+				float fx = 0.0f, fy = 0.0f;
+				sscanf(text, "%f,%f", &fx, &fy);
+				const Point back = LeadFromFraction(p, sizes[k], fx, fy);
+				kept = kept && std::fabs(back.x - grouped[k].x) < 0.5f && std::fabs(back.y - grouped[k].y) < 0.5f;
+			}
+			Check(kept, "grouped to ungrouped: each pin keeps its spot", Describe(c));
+
+			// Pins then dragged about, switched back: the lead stays, the rest sit under it.
+			Point free[kMaxPins];
+			for (int k = 0; k < count; ++k)
+				free[k] = ClampToScreen(p, sizes[k], { res.w * (0.1f + 0.1f * static_cast<float>(k)), res.h * (0.7f - 0.07f * static_cast<float>(k)) });
+			Point snapped[kMaxPins];
+			Arrange(p, sizes, count, free[0], snapped);
+			const Point lead = ClampToScreen(p, sizes[0], free[0]);
+			Check(snapped[0].x == lead.x && (cascade ? snapped[0].y <= lead.y : snapped[0].y == lead.y),
+				"ungrouped to grouped: the lead stays", Describe(c));
+			CheckOnScreen({ c.res, c.fontScale, c.edge, c.cascade, c.gap, c.count, c.leadName, free[0] }, p, sizes, snapped);
+			// Snapped pins sit exactly where the arrangement puts them for that lead.
+			Point again[kMaxPins];
+			Arrange(p, sizes, count, snapped[0], again);
+			bool same = true;
+			for (int k = 0; k < count; ++k)
+				same = same && again[k].x == snapped[k].x && again[k].y == snapped[k].y;
+			Check(same, "ungrouped to grouped: the pins are placed by the arrangement under the lead", Describe(c));
+			++switched;
+		}
+		printf("  %d switches checked\n", switched);
+	}
+
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
 }
