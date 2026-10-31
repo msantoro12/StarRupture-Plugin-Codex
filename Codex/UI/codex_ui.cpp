@@ -1474,7 +1474,7 @@ namespace CodexUI
 				moving ? CodexPinLayout::Point{ lead.hints.pos_x, lead.hints.pos_y }
 					   : CodexPinLayout::Point{ lead.rect.x, lead.rect.y }, at);
 
-			if (std::fabs(at[0].x - lead.rect.x) > kPinDragThreshold || std::fabs(at[0].y - lead.rect.y) > kPinDragThreshold)
+			if (CodexPinLayout::LeadNeedsRequest(moving, at[0], { lead.rect.x, lead.rect.y }, kPinDragThreshold))
 			{
 				lead.hints.pivot_x = 0.0f;
 				lead.hints.pivot_y = 0.0f;
