@@ -6,15 +6,6 @@
 #include <cstdio>
 #include <cstring>
 
-#include <cstdio>
-#include <cstring>
-
-#include <cstdio>
-#include <cstring>
-
-#include <cstdio>
-#include <cstring>
-
 namespace CodexConfig
 {
 	static const ConfigEntry CONFIG_ENTRIES[] = {
@@ -55,7 +46,7 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
-			"PinGap",
+			"PinSpacing",
 			ConfigValueType::Integer,
 			"6",
 			"Space between tiled pinned recipes, in screen pixels",
@@ -225,21 +216,14 @@ namespace CodexConfig
 			return "Tile";
 		}
 
-		// Returns the space between tiled pins, in screen pixels (1 to 50). An older
-		// config holds the on/off option here; it is read as its meaning and saved
-		// back as a number so the config page shows it.
+		// Returns the space between tiled pins, in screen pixels (1 to 50).
 		static int GetPinGap()
 		{
 			if (!s_self)
 				return CodexPinLayout::kGapDefault;
 			char text[16] = "";
-			s_self->config->ReadString(s_self, "Menu", "PinGap", text, sizeof(text), "");
-			const int gap = CodexPinLayout::GapFromText(text);
-			char number[16];
-			snprintf(number, sizeof(number), "%d", gap);
-			if (strcmp(text, number) != 0)
-				s_self->config->WriteInt(s_self, "Menu", "PinGap", gap);
-			return gap;
+			s_self->config->ReadString(s_self, "Menu", "PinSpacing", text, sizeof(text), "");
+			return CodexPinLayout::GapFromText(text);
 		}
 
 		// Returns whether the pins are kept centered along their edge.

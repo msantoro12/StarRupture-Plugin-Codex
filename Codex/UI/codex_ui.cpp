@@ -130,7 +130,6 @@ namespace CodexUI
 		bool HasFreePinSlot();
 		bool AnyPinned();
 		int  PinCount();
-		void SwitchSpotsWithoutPins();
 
 		std::string ToLower(const std::string& s)
 		{
@@ -1302,6 +1301,17 @@ namespace CodexUI
 		// alone when a pin is added or removed. Clear and Arrange reset it.
 		bool g_pinHandPlaced = false;
 
+		// Grouped, a follower was pressed: the first pin takes the drag up on its
+		// next render, as if it had been grabbed itself, so the whole group moves
+		// by the mouse's move. The mouse position is where the press landed.
+		struct PinGrab
+		{
+			bool  pending = false;
+			float mouseX = 0.0f;
+			float mouseY = 0.0f;
+		};
+		PinGrab g_pinGrab;
+
 		// The PinLayout was changed while pins were up (the edge it was before):
 		// the first pin's render moves the pins to the closest equivalent spot.
 		bool    g_pinSwitchPending = false;
@@ -1597,11 +1607,17 @@ namespace CodexUI
 		}
 
 		// A drag is a move by hand: nothing eases, everything follows at once.
+		// Pins still on their way are put at their targets.
 		void CancelPinGlides()
 		{
 			g_pinGlideWindow = 0.0f;
 			for (PinSlot& slot : g_pins)
+			{
+				if (!slot.glide.active)
+					continue;
+				RequestPinPos(slot, slot.glide.to);
 				slot.glide.active = false;
+			}
 		}
 
 		// Puts a pin the layout moves at `at`: straight away, or, for a short while
@@ -1801,6 +1817,8 @@ namespace CodexUI
 				return;
 
 			const bool mirror = g_pinSwitchFrom != PinEdge::Top && g_pinSettings.edge != PinEdge::Top;
+			if (!mirror)
+				g_pinHandPlaced = false;
 			const float width = g_displayW > 0.0f ? g_pinAnchoredLeadW / g_displayW : 0.0f;
 			auto move = [&](PinAnchor& anchor) {
 				if (!anchor.set)
@@ -1843,6 +1861,7 @@ namespace CodexUI
 						g_pins[k].applyFree = false;
 					}
 					CommitPinFreeAnchors();
+					g_pinHandPlaced = g_pinHandPlaced || g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0].set;
 				}
 				else if (count > 0 && g_pins[0].rect.valid)
 				{
@@ -2162,6 +2181,27 @@ namespace CodexUI
 			}
 		}
 
+		// The first pin's render: takes up a drag that was started on another
+		// pin (g_pinGrab), as if the first pin had been pressed where the mouse
+		// went down, so it follows the mouse like a drag of the first pin.
+		void GrabLeadFromFollower(IModLoaderImGui* imgui, PinSlot& lead)
+		{
+			if (!g_pinGrab.pending)
+				return;
+			g_pinGrab.pending = false;
+			if (!imgui->IsMouseDown(0))
+				return;
+
+			float posX = 0.0f, posY = 0.0f;
+			imgui->GetWindowPos(&posX, &posY);
+			CancelPinGlides();
+			lead.dragging = true;
+			lead.dragFromX = posX;
+			lead.dragFromY = posY;
+			lead.grabX = g_pinGrab.mouseX - posX;
+			lead.grabY = g_pinGrab.mouseY - posY;
+		}
+
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
 			PinSlot& slot = g_pins[index];
@@ -2179,21 +2219,20 @@ namespace CodexUI
 
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
 
-			// Clicking a pin brings it to the front, in either grouping; a click
-			// never changes a position.
+			// The first pin's render sets up the frame for every pin: the clock, then the
+			// grouping and spots, before any pin begins.
 			if (index == 0)
 			{
 				AdvancePinClock(imgui);
 				UpdatePinGrouping(imgui);
 			}
 
-			// Grouped: only the lead is dragged, and it carries the rest. Ungrouped:
-			// every pin is dragged on its own. A pin that cannot be dragged is
-			// NoMove, shows no move cursor and never starts a drag.
-			const bool canDrag = CodexPinLayout::CanDrag(g_pinSettings.free, index);
-			slot.hints.extra_window_flags = canDrag ? kPinWindowFlags : kPinWindowFlags | PluginWindowFlags_NoMove;
-			if (!canDrag)
-				slot.dragging = false;
+			// Grouped: dragging any pin moves the whole group. The lead is moved by
+			// the window itself; a press on another pin is handed to the lead, which
+			// then follows the mouse, and that pin is placed by the layout like every
+			// follower. Ungrouped: every pin is dragged on its own.
+			const bool follower = !g_pinSettings.free && index != 0;
+			slot.hints.extra_window_flags = follower ? kPinWindowFlags | PluginWindowFlags_NoMove : kPinWindowFlags;
 
 			if (g_pinSettings.free)
 			{
@@ -2202,7 +2241,7 @@ namespace CodexUI
 				SaveDraggedPin(imgui, index, slot);
 				ShowDragCursor(imgui);
 			}
-			else if (canDrag)
+			else if (!follower)
 			{
 				slot.applyFree = false;
 
@@ -2210,6 +2249,7 @@ namespace CodexUI
 				// grows, as it does when the Codex opens and the buttons show.
 				const bool edgeAnchored = g_pinSettings.edge == PinEdge::Right &&
 					!g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0].set;
+				GrabLeadFromFollower(imgui, slot);
 				if (!g_pinSwitchPending && (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
 					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW)))
 					AnchorLead(imgui, slot);
@@ -2220,8 +2260,14 @@ namespace CodexUI
 			else
 			{
 				// The rest follow the lead, which has already asked for their
-				// positions this frame.
+				// positions this frame. A press on one starts a drag of the group.
 				slot.applyFree = false;
+				if (imgui->IsMouseClicked(0, false) && imgui->IsWindowHovered(0))
+				{
+					g_pinGrab.pending = true;
+					imgui->GetMousePos(&g_pinGrab.mouseX, &g_pinGrab.mouseY);
+				}
+				ShowDragCursor(imgui);
 			}
 
 			// The layout has set this frame's targets: the glides move towards them.

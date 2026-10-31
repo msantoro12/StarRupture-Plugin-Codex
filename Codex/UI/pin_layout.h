@@ -5,7 +5,7 @@
 // gap: no ImGui, no game, so it can be tested on its own.
 //
 // Grouped (the default): the first pin is the lead and the only one the
-// player drags; the rest tile or cascade under it. Ungrouped: every pin has
+// player drags (or any pin, which carries the lead); the rest tile or cascade under it. Ungrouped: every pin has
 // its own spot, and a new pin is placed by PlaceNew. Every window stays fully
 // on screen.
 
@@ -43,7 +43,7 @@ namespace CodexPinLayout
 		float screenW = 0.0f;
 		float screenH = 0.0f;
 		float step = 0.0f;  // the theme's frame height with spacing: the margin, the cascade step
-		float frame = 0.0f; // the theme's frame height; step less frame is the item spacing
+		float frame = 0.0f; // the theme's frame height (the cascade overlap)
 		Edge  edge = Edge::Right;
 		bool  cascade = false;
 		float gap = 0.0f;   // tiles: the space between windows, in pixels
@@ -206,13 +206,6 @@ namespace CodexPinLayout
 				++inLine;
 			}
 		}
-	}
-
-	// Whether the player can drag pin `index` by hand. Grouped: only the first
-	// pin, the lead, which carries the rest. Ungrouped: every pin, on its own.
-	inline bool CanDrag(bool ungrouped, int index)
-	{
-		return ungrouped || index == 0;
 	}
 
 	// Whether the lead's placement has to be requested this frame. A request
@@ -486,15 +479,12 @@ namespace CodexPinLayout
 		return { from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e };
 	}
 
-	// The spacing option's value from its config text, kept in 1 to 50. The old
-	// on/off option's text keeps its meaning: "true" (a gap) is the default
-	// spacing and "false" (packed) the smallest.
+	// The spacing option's value from its config text, kept in 1 to 50; no
+	// number is the default spacing.
 	inline int GapFromText(const char* text)
 	{
-		if (!text || !text[0] || _stricmp(text, "true") == 0)
+		if (!text || !text[0])
 			return kGapDefault;
-		if (_stricmp(text, "false") == 0)
-			return kGapMin;
 		char* end = nullptr;
 		const long value = strtol(text, &end, 10);
 		return end == text ? kGapDefault : static_cast<int>(std::clamp(value, static_cast<long>(kGapMin), static_cast<long>(kGapMax)));

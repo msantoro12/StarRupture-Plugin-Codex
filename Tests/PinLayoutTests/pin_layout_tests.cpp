@@ -410,12 +410,12 @@ namespace
 			Check(mid.x > from.x && mid.x < to.x && mid.y < from.y && mid.y > to.y, "midway is between source and target", "glide");
 		}
 
-		// 16. The spacing option: 1 to 50, the old on/off text keeps its meaning.
+		// 16. The spacing option: 1 to 50.
 		printf("spacing\n");
 		{
 			struct Case2 { const char* text; int want; };
 			const Case2 cases[] = {
-				{ "true", kGapDefault }, { "TRUE", kGapDefault }, { "false", kGapMin }, { "", kGapDefault },
+				{ "", kGapDefault },
 				{ "1", 1 }, { "6", 6 }, { "25", 25 }, { "50", 50 }, { "0", 1 }, { "-4", 1 }, { "51", 50 },
 				{ "900", 50 }, { "nonsense", kGapDefault },
 			};
@@ -977,18 +977,50 @@ int main()
 		printf("  %d switches checked\n", switched);
 	}
 
-	// 12. Which pins can be dragged. Grouped: only the first, the lead.
-	//     Ungrouped: every pin.
-	printf("drag eligibility\n");
+	// 12. Grouped, dragging any pin moves the whole group by the drag: the lead
+	//     moves by the same amount and the layout is kept. With centering on the
+	//     group moves only across the edge.
+	printf("group drag\n");
 	{
-		for (int index = 0; index < kMaxPins; ++index)
-		{
-			char what[64];
-			snprintf(what, sizeof(what), "pin %d", index);
-			Check(CanDrag(false, index) == (index == 0), "grouped: only the first pin is dragged", what);
-			Check(CanDrag(true, index), "ungrouped: every pin is dragged", what);
-		}
-		printf("  %d pins checked\n", kMaxPins);
+		int dragged = 0;
+		const Edge edges[] = { Edge::Right, Edge::Left, Edge::Top };
+		for (Edge edge : edges)
+			for (int cascade = 0; cascade < 2; ++cascade)
+				for (int center = 0; center < 2; ++center)
+					for (int count = 1; count <= 4; ++count)
+					{
+						Params p;
+						p.screenW = 1920.0f;
+						p.screenH = 1080.0f;
+						p.frame = 24.0f;
+						p.step = 30.0f;
+						p.edge = edge;
+						p.cascade = cascade != 0;
+						p.gap = 6.0f;
+						p.center = center != 0;
+						Size sizes[kMaxPins];
+						for (int k = 0; k < count; ++k)
+							sizes[k] = { 260.0f + 10.0f * k, 120.0f + 15.0f * k };
+
+						const Point start = DefaultLead(p, sizes[0]);
+						Point before[kMaxPins];
+						Arrange(p, sizes, count, start, before);
+
+						const Point drag = { edge == Edge::Right ? -43.0f : 43.0f, 31.0f };
+						Point after[kMaxPins];
+						Arrange(p, sizes, count, { before[0].x + drag.x, before[0].y + drag.y }, after);
+
+						const bool alongX = edge == Edge::Top;
+						const Point moved = p.center ? Point{ alongX ? 0.0f : drag.x, alongX ? drag.y : 0.0f } : drag;
+						char what[96];
+						snprintf(what, sizeof(what), "edge %d %s %s %d pins", static_cast<int>(edge), cascade ? "cascade" : "tile", center ? "centered" : "free", count);
+						bool kept = true;
+						for (int k = 0; k < count; ++k)
+							kept = kept && std::fabs(after[k].x - before[k].x - moved.x) < 1.01f && std::fabs(after[k].y - before[k].y - moved.y) < 1.01f;
+						Check(kept, "every pin moves by the drag and the layout is kept", what);
+						++dragged;
+					}
+		printf("  %d drags checked\n", dragged);
 	}
 	RunCenteringTests();
 

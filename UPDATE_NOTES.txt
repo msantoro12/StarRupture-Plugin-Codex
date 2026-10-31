@@ -2,9 +2,9 @@ Search box: Up/Down (hold to repeat) pick a result, Enter opens it, the top resu
 Search box opens centred and can be dragged (the move cursor shows where); it reopens where you left it
 New option PinLayout: pinned recipes start at the right, left or top edge
 New option PinArrangement: pins tile under the first one (default) or cascade one title bar apart
-New option PinGap: space between tiled pins (the config page slider, 1 to 50 screen pixels, default 6); an older true or false reads as 6 or 1
-Drag the first pin while the Codex, the mod loader overlay (F2) or the Escape menu is open and the other pins follow; the move cursor shows where it can be grabbed while the Codex or the overlay is open
-Where the first pin is dropped is remembered for Tile and Cascade separately and kept between sessions (new options PinTileOffset, PinCascadeOffset)
+New option PinSpacing: space between tiled pins (the config page slider, 1 to 50 screen pixels, default 6); it replaces the old on/off PinGap, which is no longer read
+Drag any pin while the Codex, the mod loader overlay (F2) or the Escape menu is open and the whole group follows; the move cursor shows where it can be grabbed while the Codex or the overlay is open
+Where the group is dropped is remembered for Tile and Cascade separately and kept between sessions (new options PinTileOffset, PinCascadeOffset)
 Arrange pins button on the recipe window forgets the dropped spot for the current arrangement and puts the pins back on the edge
 Pinned windows have a Launch planner button, same as the recipe tab (shown while the Codex is open, like Open and Unpin)
 Needs a mod loader with plugin interface v71; on an older loader Codex shows "Needs loader" and stays off
@@ -18,12 +18,12 @@ The search box and pin positions are no longer config fields; a Saved state row 
 Pins stay fully on screen at any resolution or font scale: tiles wrap to the side with room, a cascade takes shorter steps near the bottom, and a saved first-pin spot is kept on screen when the screen size changes
 Pins follow the first one with no lag while it is dragged, and cascaded pins keep their title bars in pin order
 Clicking a pinned recipe brings it to the front; its spot never changes
-New option PinGrouping: Grouped (default) keeps the pins together under the first one, and only the first pin can be dragged; Ungrouped lets you move every pin on its own, and dragging one never moves another
+New option PinGrouping: Grouped (default) keeps the pins together under the first one, and dragging any pin moves the whole group; Ungrouped lets you move every pin on its own, and dragging one never moves another
 Ungrouped, a new pin appears where the arrangement would put it next to the last pin when that spot is free and on screen, else at the next free spot, else at the default spot
 Ungrouped spots are saved (new option PinFreeOffsets): the first pin comes back where the first one was left, and all of them are re-fitted when the screen size changes; Clear and Arrange pins put the pins where they would go if just pinned
 Switching to Ungrouped leaves every pin where it is; switching back to Grouped puts the rest back under the first pin
 New option PinCentering (default on): the pinned recipes sit in the middle of their edge, across the top or down the left or right side, and re-center when a pin is added or removed
-With PinCentering on, dragging the first pin moves it only toward or away from the edge; Clear and Arrange pins put the group back on the edge, centered. Off, drag it anywhere
+With PinCentering on, dragging any pin moves the group only toward or away from the edge; Clear and Arrange pins put the group back on the edge, centered. Off, drag it anywhere
 Ungrouped pins are centered when placed (a new pin, a layout switch, Arrange pins) and a pin you dragged yourself never moves; after a restart saved spots count as placed by hand until Arrange pins
 Changing PinLayout carries the pins over: Right and Left mirror each other at the same height and distance from the edge, Top lines them up centered across the top, and leaving Top puts them at the new edge's default spot (centered along it when PinCentering is on)
 Pins that move on their own (a pin added or removed, a layout switch, Clear, Arrange pins) glide to their new spot in about a fifth of a second; a pin being dragged does not

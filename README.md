@@ -30,13 +30,13 @@ loader the plugin shows "Needs loader" and stays off.
   pin starts at the screen edge set by `PinLayout` (right, left or top) and the rest sit under
   it, set by `PinArrangement`: `Tile` (the default) lines them up edge to edge -- down a
   column for right and left, along a row for top, starting a new column or row at the screen
-  margin when one fills -- with a gap between them that `PinGap` sets (1 to 50 screen pixels), and `Cascade`
+  margin when one fills -- with a gap between them that `PinSpacing` sets (1 to 50 screen pixels), and `Cascade`
   steps each one a title bar down and in. Pinned windows never block game input. While the
-  Codex (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, drag the first
-  pin and the others follow it; the move cursor shows where it can be grabbed while the Codex
+  Codex (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, drag any
+  pin and the whole group follows it; the move cursor shows where it can be grabbed while the Codex
   or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
-  Cascade each remember where you dropped the first pin, across sessions. Only the first pin
-  can be dragged; pressing and dragging any other pin moves nothing. If you unpin the first pin, the next oldest becomes the first and takes its place. The
+  Cascade each remember where you dropped the group, across sessions. Pressing and dragging
+  any pin moves the whole group and keeps its layout. If you unpin the first pin, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
   and puts the pins back on the edge. Clicking a pin brings it to the front without moving
   anything. Set `PinGrouping` to `Ungrouped` and every pin is moved by hand on its own,
@@ -46,7 +46,7 @@ loader the plugin shows "Needs loader" and stays off.
   switching back to `Grouped` puts the rest back under the first pin, which stays where it is. Pins are not
   restored after a reload: the first pin you pin again returns to where the first one was last left, and the
   rest are placed next to it. Clicking a pin raises that window; unpinning a pin lets the others
-  take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging the first pin then moves it only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
+  take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging any pin then moves the group only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the Codex to unpin them.
 - **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
   Open and Unpin) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -80,8 +80,8 @@ them as plain text fields.
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
 | `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` or `Ungrouped` (dropdown) |
-| `Menu` | `PinGap` | `6` | Space between tiled pins, 1 to 50 screen pixels (a slider with a number box on the config page; not scaled by the font or UI scale). An older `true` reads as 6 and `false` as 1 |
-| `Menu` | `PinCentering` | `true` | Keep the pinned recipes centered along their edge: left to right on Top, top to bottom on Left and Right. On: the group re-centers when a pin is added or removed, and dragging the first pin moves it only toward or away from the edge. Off: drag it anywhere. Ungrouped, it only places a pin or the whole set when you pin, change the layout, or press Arrange pins; it never moves a pin you placed by hand |
+| `Menu` | `PinSpacing` | `6` | Space between tiled pins, 1 to 50 screen pixels (a slider with a number box on the config page; not scaled by the font or UI scale). Replaces the old on/off `PinGap`, which is no longer read |
+| `Menu` | `PinCentering` | `true` | Keep the pinned recipes centered along their edge: left to right on Top, top to bottom on Left and Right. On: the group re-centers when a pin is added or removed, and dragging any pin moves the group only toward or away from the edge. Off: drag it anywhere. Ungrouped, it only places a pin or the whole set when you pin, change the layout, or press Arrange pins; it never moves a pin you placed by hand |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box. No field on the config page; Clear resets it |
 | `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` (dropdown) |
