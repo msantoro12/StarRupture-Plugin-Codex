@@ -179,6 +179,17 @@ namespace CodexPinLayout
 		}
 	}
 
+	// Whether the lead's placement has to be requested this frame. A request
+	// still pending (a drag or an anchor) is always answered with the laid-out
+	// spot: Arrange can move the lead off the requested one (a cascade lifts
+	// it), and comparing with the window's measured spot instead would send
+	// the lifted spot only every other frame, so the lead would flicker. With
+	// nothing pending, only a window that has drifted from its spot is moved.
+	inline bool LeadNeedsRequest(bool pending, Point placed, Point measured, float threshold)
+	{
+		return pending || std::fabs(placed.x - measured.x) > threshold || std::fabs(placed.y - measured.y) > threshold;
+	}
+
 	// Positions for `count` windows (at most kMaxPins) in pin order; sizes[0]
 	// and lead are the lead's. The lead is kept on screen; a cascade that would
 	// not fit below it lifts the lead too.

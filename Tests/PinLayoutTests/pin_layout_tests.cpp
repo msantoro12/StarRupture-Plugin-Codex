@@ -362,6 +362,49 @@ int main()
 		printf("  %d random layouts checked\n", fuzzed);
 	}
 
+	// 8. Dragging the lead with the mouse held still. Each frame the drag asks
+	//    for the clamped mouse spot, Arrange may move the lead off it (a cascade
+	//    lifts it when the stack does not fit below), and the window sits where
+	//    the last request put it. The lead has to settle, not alternate.
+	printf("drag\n");
+	{
+		const Point mice[] = { { 730, 715 }, { 1275, 300 }, { 1275, 715 }, { 640, 5 } };
+		for (const Resolution& res : kResolutions)
+		for (const Point& mouse : mice)
+		for (int arrangement = 0; arrangement < 2; ++arrangement)
+		for (int count = 2; count <= 6; count += 2)
+		{
+			Case c{ &res, 2.0f, Edge::Right, arrangement == 1, true, count, "drag", {} };
+			const Params p = MakeParams(c);
+			Size sizes[kMaxPins];
+			for (int k = 0; k < count; ++k)
+				sizes[k] = { kBasePins[k].w * 2.0f, kBasePins[k].h * 2.0f };
+
+			Point pos = ClampToScreen(p, sizes[0], { 700, 100 }); // where the window is
+			const Point wanted = ClampToScreen(p, sizes[0], mouse);
+			Point history[12];
+			for (int frame = 0; frame < 12; ++frame)
+			{
+				const Point measured = pos;
+				Point hint = wanted; // what the drag asks for this frame
+				Point at[kMaxPins];
+				Arrange(p, sizes, count, hint, at);
+				if (LeadNeedsRequest(true, at[0], measured, 0.5f))
+					hint = at[0];
+				pos = hint;
+				history[frame] = pos;
+			}
+			bool steady = true;
+			for (int frame = 4; frame < 12; ++frame)
+				steady = steady && history[frame].x == history[11].x && history[frame].y == history[11].y;
+			Check(steady, "a held-still drag leaves the lead where it settles", Describe(c));
+		}
+
+		// Nothing pending: a window that drifted is moved back, one that did not is left alone.
+		Check(!LeadNeedsRequest(false, { 100, 100 }, { 100.2f, 100.2f }, 0.5f), "a lead in place is not asked to move", "no request");
+		Check(LeadNeedsRequest(false, { 100, 100 }, { 100, 140 }, 0.5f), "a drifted lead is asked to move", "no request");
+	}
+
 	printf("\n%d checks, %d failed\n", g_checks, g_failed);
 	return g_failed == 0 ? 0 : 1;
 }
