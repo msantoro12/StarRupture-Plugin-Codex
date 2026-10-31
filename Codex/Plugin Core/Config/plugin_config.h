@@ -31,7 +31,21 @@ namespace CodexConfig
 			"PinLayout",
 			ConfigValueType::String,
 			"Right",
-			"Screen edge new pinned recipes cascade from: \"Right\", \"Left\" or \"Top\""
+			"Screen edge pinned recipes start from: \"Right\", \"Left\" or \"Top\""
+		},
+		{
+			"Menu",
+			"PinArrangement",
+			ConfigValueType::String,
+			"Tile",
+			"How pinned recipes sit under the first one: \"Tile\" or \"Cascade\""
+		},
+		{
+			"Menu",
+			"PinGap",
+			ConfigValueType::Boolean,
+			"true",
+			"Leave a gap between tiled pinned recipes; off packs them edge to edge"
 		},
 		{
 			"Menu",
@@ -48,6 +62,20 @@ namespace CodexConfig
 			"Top edge of the search box as a fraction of the screen height; -1 centres it. Drag the box to set"
 		},
 		{
+			"Menu",
+			"PinTileOffset",
+			ConfigValueType::String,
+			"",
+			"Where the first pinned recipe was last dragged to while tiling, as a screen-fraction \"x,y\" (empty = not moved). Clear to reset"
+		},
+		{
+			"Menu",
+			"PinCascadeOffset",
+			ConfigValueType::String,
+			"",
+			"Where the first pinned recipe was last dragged to while cascading, as a screen-fraction \"x,y\" (empty = not moved). Clear to reset"
+		},
+		{
 			"Planner",
 			"Planner",
 			ConfigValueType::String,
@@ -60,13 +88,6 @@ namespace CodexConfig
 			ConfigValueType::String,
 			"",
 			"Custom planner address; {item} becomes the StarRupture Planner's item id, {name} the item's display name and {game} the game's internal item name"
-		},
-		{
-			"Menu",
-			"PinPositions",
-			ConfigValueType::String,
-			"",
-			"Where each pinned recipe slot was last dragged, as screen-fraction \"x,y\" pairs separated by \";\" (empty = not moved). Clear to reset"
 		}
 	};
 
@@ -114,7 +135,7 @@ namespace CodexConfig
 			return "Shift+N";
 		}
 
-		// Returns the screen edge new pins cascade from: "Right" (default), "Left" or "Top".
+		// Returns the screen edge pins start from: "Right" (default), "Left" or "Top".
 		static const char* GetPinLayout()
 		{
 			static char buffer[16];
@@ -159,18 +180,33 @@ namespace CodexConfig
 			return "";
 		}
 
-		// Saved pin positions: "x,y" screen fractions of each slot's top-left
-		// corner, separated by ";". An empty entry means the slot was never moved.
-		static void GetPinPositions(char* out, int maxLen)
+		// Returns how pins sit under the first one: "Tile" (default) or "Cascade".
+		static const char* GetPinArrangement()
 		{
-			if (!s_self || !s_self->config->ReadString(s_self, "Menu", "PinPositions", out, maxLen, ""))
+			static char buffer[16];
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "PinArrangement", buffer, sizeof(buffer), "Tile"))
+				return buffer;
+			return "Tile";
+		}
+
+		// Returns whether tiled pins leave a gap between them.
+		static bool GetPinGap()
+		{
+			return s_self ? s_self->config->ReadBool(s_self, "Menu", "PinGap", true) : true;
+		}
+
+		// Saved position of the first pin for the tile or cascade arrangement: an "x,y"
+		// screen fraction of its top-left corner; empty means it was never moved.
+		static void GetPinOffset(bool cascade, char* out, int maxLen)
+		{
+			if (!s_self || !s_self->config->ReadString(s_self, "Menu", cascade ? "PinCascadeOffset" : "PinTileOffset", out, maxLen, ""))
 				out[0] = '\0';
 		}
 
-		static void SetPinPositions(const char* positions)
+		static void SetPinOffset(bool cascade, const char* offset)
 		{
 			if (s_self)
-				s_self->config->WriteString(s_self, "Menu", "PinPositions", positions);
+				s_self->config->WriteString(s_self, "Menu", cascade ? "PinCascadeOffset" : "PinTileOffset", offset);
 		}
 
 	private:

@@ -26,14 +26,22 @@ loader the plugin shows "Needs loader" and stays off.
 - **Building browser** -- the Buildings tab lists every crafting building and the recipes it
   can produce. Tiered buildings are grouped under one name (e.g. "Fabricator") with a
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
-- **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. New pins
-  cascade from the screen edge set by `PinLayout` (right, left or top), each one a title bar
-  lower than the last. Pinned windows never block game input; drag them while the Codex
-  (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, and use the Codex to
-  unpin them. Each pin slot remembers where you dropped it, across sessions. The recipe
-  window's **Arrange pins** button forgets those spots and puts the pins back in their cascade.
-- **Launch planner** -- the recipe tab has a button that opens a production planner for the
-  recipe's output in your browser. Choose the planner with `Planner`: the StarRupture Planner
+- **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. The first
+  pin starts at the screen edge set by `PinLayout` (right, left or top) and the rest sit under
+  it, set by `PinArrangement`: `Tile` (the default) lines them up edge to edge -- down a
+  column for right and left, along a row for top, starting a new column or row at the screen
+  margin when one fills -- with a gap between them that `PinGap` can turn off, and `Cascade`
+  steps each one a title bar down and in. Pinned windows never block game input. While the
+  Codex (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, drag the first
+  pin and the others follow it; the move cursor shows where it can be grabbed while the Codex
+  or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
+  Cascade each remember where you dropped the first pin, across sessions. Only the first pin
+  moves by hand: if you unpin it, the next oldest becomes the first and takes its place. The
+  recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
+  and puts the pins back on the edge. Use the Codex to unpin them.
+- **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
+  Open and Unpin) have a button that opens a production planner for the recipe's output in
+  your browser. Choose the planner with `Planner`: the StarRupture Planner
   (the default) adds the item at one machine's output, starruptureplanner.com and
   starrupturecalc.com open their calculator for the item, and starrupture-planner.com opens
   its planner page (it has no item link). Items a planner does not list open it without an
@@ -51,12 +59,15 @@ Settings are written to the plugin's config file on first run and can be edited 
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
-| `Menu` | `PinLayout` | `Right` | Screen edge new pinned recipes cascade from: `Right`, `Left` or `Top` |
+| `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` |
+| `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` |
+| `Menu` | `PinGap` | `true` | Leave a gap between tiled pins; off packs them edge to edge |
 | `Menu` | `SearchBoxX` | `-1` | Search box horizontal centre as a fraction of the screen width (`-1` = centred). Set by dragging the box |
 | `Menu` | `SearchBoxY` | `-1` | Search box top edge as a fraction of the screen height (`-1` = centred). Set by dragging the box |
 | `Planner` | `Planner` | `StarRupture Planner` | Planner the Launch planner button opens: `StarRupture Planner`, `starruptureplanner.com`, `starrupturecalc.com`, `starrupture-planner.com` or `Custom` |
 | `Planner` | `CustomUrlTemplate` | (empty) | Address used when `Planner` is `Custom`. `{item}` becomes the StarRupture Planner's item id, `{name}` the item's display name and `{game}` the game's internal item name, all URL-encoded, e.g. `https://example.com/plan?item={item}` |
-| `Menu` | `PinPositions` | empty | Where each pin slot was last dropped, as `x,y` screen fractions separated by `;`. Set by dragging a pin; clear it to reset |
+| `Menu` | `PinTileOffset` | empty | Where the first pin was last dropped while tiling, as an `x,y` screen fraction. Set by dragging it; clear it to reset |
+| `Menu` | `PinCascadeOffset` | empty | Where the first pin was last dropped while cascading, as an `x,y` screen fraction. Set by dragging it; clear it to reset |
 
 ---
 

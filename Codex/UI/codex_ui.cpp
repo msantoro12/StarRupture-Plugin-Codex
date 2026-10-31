@@ -110,6 +110,8 @@ namespace CodexUI
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
 		constexpr int kTabItemFlagsSetSelected = 1 << 1;
 		constexpr int kWindowFlagsAlwaysAutoResize = 1 << 6;
+		constexpr int kWindowFlagsNoBringToFrontOnFocus = 1 << 13;
+		constexpr int kMouseCursorResizeAll = 2;
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
 		void OnSearchKeyPressed(EModKey key, EModKeyEvent event);
@@ -681,6 +683,14 @@ namespace CodexUI
 				imgui->SetScrollHereY(0.5f);
 		}
 
+		// Shows the move cursor over the parts of a window the player can grab
+		// and drag: anywhere that is not a control.
+		void ShowDragCursor(IModLoaderImGui* imgui)
+		{
+			if (imgui->IsWindowHovered(0) && !imgui->IsAnyItemHovered())
+				imgui->SetMouseCursor(kMouseCursorResizeAll);
+		}
+
 		void RenderSearchWidget(IModLoaderImGui* imgui)
 		{
 			const float fontScale = (std::max)(1.0f, imgui->GetFontSize() / kBaselineFontSize);
@@ -721,6 +731,8 @@ namespace CodexUI
 					g_justOpenedSearch = true;
 				}
 			}
+
+			ShowDragCursor(imgui);
 
 			if (g_justOpenedSearch)
 			{
@@ -883,6 +895,15 @@ namespace CodexUI
 			}
 		}
 
+		// The Launch planner button, shared by the recipe tab and the pinned
+		// windows.
+		void RenderLaunchPlannerButton(IModLoaderImGui* imgui, const CodexRecipes::RecipeInfo& info)
+		{
+			if (imgui->SmallButton("Launch planner"))
+				CodexPlanner::Launch(info.output.uniqueItemName, info.output.displayName);
+			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
+		}
+
 		void RenderRecipeTab(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
 		{
 			CodexRecipes::RecipeInfo info;
@@ -904,9 +925,7 @@ namespace CodexUI
 				imgui->SetItemTooltip("Keep this recipe on screen while you play.");
 
 			imgui->SameLine(0.0f, -1.0f);
-			if (imgui->SmallButton("Launch planner"))
-				CodexPlanner::Launch(info.output.uniqueItemName, info.output.displayName);
-			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
+			RenderLaunchPlannerButton(imgui, info);
 
 			imgui->SameLine(0.0f, 12.0f);
 			imgui->SeparatorText(info.displayName.c_str());
@@ -1169,13 +1188,27 @@ namespace CodexUI
 		// open (there only to windows that opt in, as the pins do) - so with
 		// only pins on screen, the game keeps every mouse/keyboard input.
 		// Whenever one of those is up (the Codex search/detail, the
-		// modloader's F2 overlay, the Escape menu) the pins can be dragged;
-		// the Open/Unpin buttons only show while the Codex itself is open.
+		// modloader's F2 overlay, the Escape menu) the first pin can be
+		// dragged and the others follow it, tiled or cascaded; the
+		// Open/Launch planner/Unpin buttons only show while the Codex itself
+		// is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
 		// slots each gets its own template-instantiated callback.
 		// ------------------------------------------------------------------
 		constexpr int kMaxPins = 8;
+
+		// Where a pinned window sits on screen: top-left corner and size, in
+		// pixels. Measured from the window every frame; valid once it has
+		// rendered.
+		struct PinRect
+		{
+			float x = 0.0f;
+			float y = 0.0f;
+			float w = 0.0f;
+			float h = 0.0f;
+			bool  valid = false;
+		};
 
 		struct PinSlot
 		{
@@ -1183,69 +1216,136 @@ namespace CodexUI
 			WidgetHandle      widget = nullptr;
 			PluginWidgetDesc  desc{};
 			PluginWindowHints hints{};
+			PinRect           rect;
+			unsigned          order = 0; // counts up with each pin; the lowest is the lead
 			char              title[192] = "";
 			bool              dragging = false;
 			float             dragFromX = 0.0f;
 			float             dragFromY = 0.0f;
 		};
 
-		PinSlot g_pins[kMaxPins];
+		PinSlot  g_pins[kMaxPins];
+		unsigned g_pinOrder = 0;
 
-		// Where the player last dropped each slot, as fractions of the screen
-		// (top-left corner) so it survives a resolution change. Kept per slot
-		// because pinned recipes themselves are not saved. Written to the
-		// config when a drag ends, never per frame.
-		struct SavedPinPos
+		// How the pins are laid out, from the config. The lead pin (the one
+		// pinned first) is the only one the player moves; the rest follow it.
+		// Each arrangement remembers where the lead was last dropped, as a
+		// fraction of the screen (its top-left corner) so it survives a
+		// resolution change. Written to the config when a drag ends, never
+		// per frame.
+		struct PinAnchor
 		{
 			float x = 0.0f;
 			float y = 0.0f;
 			bool  set = false;
 		};
 
-		SavedPinPos g_savedPins[kMaxPins];
+		enum class PinEdge { Right, Left, Top };
 
-		// One "0.1234,0.5678;" entry per slot, with room to spare.
-		constexpr int kPinPositionsBufferSize = 16 * kMaxPins;
+		struct PinSettings
+		{
+			bool      cascade = false;
+			PinEdge   edge = PinEdge::Right;
+			bool      gap = true;
+			PinAnchor anchors[2]; // indexed by `cascade`
+		};
+
+		PinSettings g_pinSettings;
+
+		constexpr int kPinWindowFlags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
+			PluginWindowFlags_PauseMenuMouseInputs;
+
+		// Set when the lead pin has to be put back at its anchor: the layout
+		// was changed in the config, the old lead was unpinned, the screen
+		// size changed, or the player asked for Arrange pins.
+		bool  g_pinReanchor = false;
+		float g_pinAnchoredW = 0.0f;
+		float g_pinAnchoredH = 0.0f;
+		float g_pinAnchoredLeadW = 0.0f; // the lead's width when it was last placed
+
+		// One "0.1234,0.5678" entry, with room to spare.
+		constexpr int kPinOffsetBufferSize = 32;
 
 		// A drop that moves the window less than this is a click, not a drag.
 		constexpr float kPinDragThreshold = 0.5f;
 
-		void LoadPinPositions()
+		PinAnchor ParsePinAnchor(const char* text)
 		{
-			char text[kPinPositionsBufferSize];
-			CodexConfig::Config::GetPinPositions(text, sizeof(text));
-
-			const char* entry = text;
-			for (SavedPinPos& saved : g_savedPins)
-			{
-				saved = SavedPinPos{};
-				if (sscanf_s(entry, "%f,%f", &saved.x, &saved.y) == 2)
-					saved.set = saved.x >= 0.0f && saved.x <= 1.0f && saved.y >= 0.0f && saved.y <= 1.0f;
-
-				entry = strchr(entry, ';');
-				if (!entry)
-					break;
-				++entry;
-			}
+			PinAnchor anchor;
+			if (sscanf_s(text, "%f,%f", &anchor.x, &anchor.y) == 2)
+				anchor.set = anchor.x >= 0.0f && anchor.x <= 1.0f && anchor.y >= 0.0f && anchor.y <= 1.0f;
+			return anchor;
 		}
 
-		void SavePinPositions()
+		PinAnchor ReadPinAnchor(bool cascade)
 		{
-			char text[kPinPositionsBufferSize] = "";
-			size_t length = 0;
-			for (int i = 0; i < kMaxPins; ++i)
-			{
-				const SavedPinPos& saved = g_savedPins[i];
-				if (saved.set)
-					length += snprintf(text + length, sizeof(text) - length, "%.4f,%.4f", saved.x, saved.y);
-				if (i + 1 < kMaxPins)
-					length += snprintf(text + length, sizeof(text) - length, ";");
-			}
+			char text[kPinOffsetBufferSize];
+			CodexConfig::Config::GetPinOffset(cascade, text, sizeof(text));
+			return ParsePinAnchor(text);
+		}
 
-			// Slots after the last moved one carry no entry.
-			while (length > 0 && text[length - 1] == ';')
-				text[--length] = '\0';
-			CodexConfig::Config::SetPinPositions(text);
+		void WritePinAnchor(bool cascade, const PinAnchor& anchor)
+		{
+			char text[kPinOffsetBufferSize] = "";
+			if (anchor.set)
+				snprintf(text, sizeof(text), "%.4f,%.4f", anchor.x, anchor.y);
+			CodexConfig::Config::SetPinOffset(cascade, text);
+		}
+
+		PinEdge ParsePinEdge(const char* layout)
+		{
+			return _stricmp(layout, "Left") == 0 ? PinEdge::Left
+				: _stricmp(layout, "Top") == 0 ? PinEdge::Top
+				: PinEdge::Right;
+		}
+
+		// Takes up new pin options. A change to the arrangement, the edge or
+		// the current arrangement's anchor moves the lead pin to match.
+		void ApplyPinSettings(const PinSettings& next)
+		{
+			const PinAnchor& before = g_pinSettings.anchors[next.cascade ? 1 : 0];
+			const PinAnchor& after = next.anchors[next.cascade ? 1 : 0];
+			if (next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge ||
+				after.set != before.set || after.x != before.x || after.y != before.y)
+				g_pinReanchor = true;
+
+			g_pinSettings = next;
+		}
+
+		// Reads every pin option from the config, at startup.
+		void LoadPinSettings()
+		{
+			PinSettings next;
+			next.cascade = _stricmp(CodexConfig::Config::GetPinArrangement(), "Cascade") == 0;
+			next.edge = ParsePinEdge(CodexConfig::Config::GetPinLayout());
+			next.gap = CodexConfig::Config::GetPinGap();
+			next.anchors[0] = ReadPinAnchor(false);
+			next.anchors[1] = ReadPinAnchor(true);
+			ApplyPinSettings(next);
+		}
+
+		// Live edits arrive here with the new value; the config file itself
+		// is only written afterwards.
+		void OnConfigChanged(const char* section, const char* key, const char* newValue)
+		{
+			if (!section || !key || !newValue || strcmp(section, "Menu") != 0)
+				return;
+
+			PinSettings next = g_pinSettings;
+			if (strcmp(key, "PinArrangement") == 0)
+				next.cascade = _stricmp(newValue, "Cascade") == 0;
+			else if (strcmp(key, "PinLayout") == 0)
+				next.edge = ParsePinEdge(newValue);
+			else if (strcmp(key, "PinGap") == 0)
+				next.gap = _stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0;
+			else if (strcmp(key, "PinTileOffset") == 0)
+				next.anchors[0] = ParsePinAnchor(newValue);
+			else if (strcmp(key, "PinCascadeOffset") == 0)
+				next.anchors[1] = ParsePinAnchor(newValue);
+			else
+				return;
+
+			ApplyPinSettings(next);
 		}
 
 		bool CodexUIActive(IModLoaderImGui* imgui)
@@ -1283,66 +1383,153 @@ namespace CodexUI
 			return false;
 		}
 
-		// Puts a pin where the player last dropped its slot, or else in the
-		// slot's place along the configured screen edge: Right and Left start
-		// in that corner, Top at the top centre, and each slot sits one title
-		// bar plus item gap (the frame height with spacing) further down and
-		// in, so every pin's title stays readable. The cascade starts over
-		// before it would pass the middle of the screen. Only requests the
-		// position - the slot's render applies it once, after which the
-		// player's drag sticks.
-		void PlacePin(IModLoaderImGui* imgui, PinSlot& slot, int index)
+		// The pinned slots in the order they were pinned; returns how many.
+		int PinnedInOrder(int (&slots)[kMaxPins])
+		{
+			int count = 0;
+			for (int i = 0; i < kMaxPins; ++i)
+			{
+				if (!g_pins[i].nativeRecipe)
+					continue;
+
+				int at = count++;
+				while (at > 0 && g_pins[slots[at - 1]].order > g_pins[i].order)
+				{
+					slots[at] = slots[at - 1];
+					--at;
+				}
+				slots[at] = i;
+			}
+			return count;
+		}
+
+		// The slot of the lead pin - the first one pinned - or -1 when
+		// nothing is pinned.
+		int LeadPin()
+		{
+			int slots[kMaxPins];
+			return PinnedInOrder(slots) > 0 ? slots[0] : -1;
+		}
+
+		// Puts the lead pin at its anchor: where the player last dropped it
+		// for the current arrangement, or else on the configured screen edge -
+		// Right and Left at that edge's top corner, Top at the top-left. Only
+		// requests the position - the slot's render applies it once, after
+		// which the player's drag sticks.
+		void AnchorLead(IModLoaderImGui* imgui, PinSlot& slot)
 		{
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
+			g_pinAnchoredW = g_displayW;
+			g_pinAnchoredH = g_displayH;
+			g_pinAnchoredLeadW = slot.rect.w;
+			g_pinReanchor = false;
 
 			slot.hints.pivot_y = 0.0f;
 			slot.hints.pos_cond = 0;
 
-			const SavedPinPos& saved = g_savedPins[index];
-			if (saved.set)
+			const PinAnchor& anchor = g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0];
+			if (anchor.set)
 			{
 				slot.hints.pivot_x = 0.0f;
-				slot.hints.pos_x   = saved.x * g_displayW;
-				slot.hints.pos_y   = saved.y * g_displayH;
+				slot.hints.pos_x   = anchor.x * g_displayW;
+				slot.hints.pos_y   = anchor.y * g_displayH;
 				return;
 			}
 
 			const float step = imgui->GetFrameHeightWithSpacing();
-			const int perCascade = (std::max)(1, static_cast<int>((std::min)(g_displayW, g_displayH) * 0.5f / step));
-			const float offset = step * static_cast<float>(index % perCascade);
+			const bool fromRight = g_pinSettings.edge == PinEdge::Right;
+			slot.hints.pivot_x = fromRight ? 1.0f : 0.0f;
+			slot.hints.pos_x   = fromRight ? g_displayW - step : step;
+			slot.hints.pos_y   = step;
+		}
 
-			const char* layout = CodexConfig::Config::GetPinLayout();
-			if (_stricmp(layout, "Left") == 0)
+		// Works out where every pinned window other than the lead belongs,
+		// from the lead's position and each window's measured size. Tile
+		// stacks right below the lead - Right and Left in a column along that
+		// edge, Top in a row along the top - and starts the next column or row
+		// at the screen margin when the screen runs out. Cascade steps each
+		// pin one title bar (the frame height with spacing) down and in,
+		// towards the screen's middle. Returns false until the lead has
+		// rendered.
+		bool PinTargets(IModLoaderImGui* imgui, float (&x)[kMaxPins], float (&y)[kMaxPins])
+		{
+			int slots[kMaxPins];
+			const int count = PinnedInOrder(slots);
+			if (count == 0 || !g_pins[slots[0]].rect.valid)
+				return false;
+
+			const PinRect& lead = g_pins[slots[0]].rect;
+			const float step = imgui->GetFrameHeightWithSpacing();
+			const float margin = step;
+			// The theme's item spacing: the frame height with spacing less the
+			// frame height.
+			const float gap = g_pinSettings.gap ? step - imgui->GetFrameHeight() : 0.0f;
+			const PinEdge edge = g_pinSettings.edge;
+
+			if (g_pinSettings.cascade)
 			{
-				slot.hints.pivot_x = 0.0f;
-				slot.hints.pos_x   = step + offset;
+				const float inward = edge == PinEdge::Right ? -step : step;
+				for (int k = 0; k < count; ++k)
+				{
+					x[slots[k]] = lead.x + inward * static_cast<float>(k);
+					y[slots[k]] = lead.y + step * static_cast<float>(k);
+				}
 			}
-			else if (_stricmp(layout, "Top") == 0)
+			else if (edge == PinEdge::Top)
 			{
-				slot.hints.pivot_x = 0.5f;
-				slot.hints.pos_x   = g_displayW * 0.5f + offset;
+				float left = lead.x;
+				float top = lead.y;
+				float rowHeight = 0.0f;
+				for (int k = 0; k < count; ++k)
+				{
+					const PinRect& pin = g_pins[slots[k]].rect;
+					if (k > 0 && left + pin.w > g_displayW - margin)
+					{
+						left = margin;
+						top += rowHeight + gap;
+						rowHeight = 0.0f;
+					}
+					x[slots[k]] = left;
+					y[slots[k]] = top;
+					left += pin.w + gap;
+					rowHeight = (std::max)(rowHeight, pin.h);
+				}
 			}
 			else
 			{
-				slot.hints.pivot_x = 1.0f;
-				slot.hints.pos_x   = g_displayW - step - offset;
+				const bool fromRight = edge == PinEdge::Right;
+				float side = fromRight ? lead.x + lead.w : lead.x; // the edge the column lines up on
+				float top = lead.y;
+				float columnWidth = 0.0f;
+				for (int k = 0; k < count; ++k)
+				{
+					const PinRect& pin = g_pins[slots[k]].rect;
+					if (k > 0 && top + pin.h > g_displayH - margin)
+					{
+						side += (fromRight ? -1.0f : 1.0f) * (columnWidth + gap);
+						top = margin;
+						columnWidth = 0.0f;
+					}
+					x[slots[k]] = fromRight ? side - pin.w : side;
+					y[slots[k]] = top;
+					top += pin.h + gap;
+					columnWidth = (std::max)(columnWidth, pin.w);
+				}
 			}
-			slot.hints.pos_y = step + offset;
+			return true;
 		}
 
-		// Forgets every dragged position and lays the pinned recipes out along
-		// the configured edge again.
+		// Puts the pins back on the configured edge: forgets where the lead
+		// was dropped for the current arrangement.
 		void ArrangePins(IModLoaderImGui* imgui)
 		{
-			for (SavedPinPos& saved : g_savedPins)
-				saved = SavedPinPos{};
-			SavePinPositions();
+			const bool cascade = g_pinSettings.cascade;
+			g_pinSettings.anchors[cascade ? 1 : 0] = PinAnchor{};
+			WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
 
-			for (int i = 0; i < kMaxPins; ++i)
-			{
-				if (g_pins[i].nativeRecipe)
-					PlacePin(imgui, g_pins[i], i);
-			}
+			const int lead = LeadPin();
+			if (lead >= 0)
+				AnchorLead(imgui, g_pins[lead]);
 		}
 
 		void PinRecipe(IModLoaderImGui* imgui, void* nativeRecipe)
@@ -1360,10 +1547,13 @@ namespace CodexUI
 				if (slot.nativeRecipe || !slot.widget)
 					continue;
 
+				const bool first = !AnyPinned();
 				slot.nativeRecipe = nativeRecipe;
+				slot.order = ++g_pinOrder;
 				snprintf(slot.title, sizeof(slot.title), "%s###CodexPin%d", info.displayName.c_str(), i);
 
-				PlacePin(imgui, slot, i);
+				if (first)
+					AnchorLead(imgui, slot);
 
 				if (g_self && g_self->hooks->UI)
 					g_self->hooks->UI->SetWidgetVisible(slot.widget, true);
@@ -1374,15 +1564,21 @@ namespace CodexUI
 		void UnpinSlot(int index)
 		{
 			PinSlot& slot = g_pins[index];
+
+			// The next pin along becomes the lead and takes the anchor.
+			if (LeadPin() == index)
+				g_pinReanchor = true;
+
 			slot.nativeRecipe = nullptr;
+			slot.rect = PinRect{};
 			slot.dragging = false;
 			if (g_self && g_self->hooks->UI && slot.widget)
 				g_self->hooks->UI->SetWidgetVisible(slot.widget, false);
 		}
 
-		// Saves the slot's position once, when a drag that moved its window
-		// ends.
-		void SavePinIfDragged(IModLoaderImGui* imgui, PinSlot& slot, int index)
+		// Saves the lead's position as the current arrangement's anchor once,
+		// when a drag that moved its window ends.
+		void SaveLeadIfDragged(IModLoaderImGui* imgui, PinSlot& slot)
 		{
 			float posX = 0.0f, posY = 0.0f;
 			imgui->GetWindowPos(&posX, &posY);
@@ -1399,9 +1595,11 @@ namespace CodexUI
 				if (std::fabs(posX - slot.dragFromX) > kPinDragThreshold || std::fabs(posY - slot.dragFromY) > kPinDragThreshold)
 				{
 					imgui->GetDisplaySize(&g_displayW, &g_displayH);
-					// Clamped so a pin dropped partly off the screen is still restored.
-					g_savedPins[index] = { std::clamp(posX / g_displayW, 0.0f, 1.0f), std::clamp(posY / g_displayH, 0.0f, 1.0f), true };
-					SavePinPositions();
+					// Clamped so a lead dropped partly off the screen is still restored.
+					const bool cascade = g_pinSettings.cascade;
+					g_pinSettings.anchors[cascade ? 1 : 0] =
+						{ std::clamp(posX / g_displayW, 0.0f, 1.0f), std::clamp(posY / g_displayH, 0.0f, 1.0f), true };
+					WritePinAnchor(cascade, g_pinSettings.anchors[cascade ? 1 : 0]);
 				}
 			}
 		}
@@ -1410,11 +1608,52 @@ namespace CodexUI
 		{
 			PinSlot& slot = g_pins[index];
 
-			// The initial placement has now been applied - stop forcing it.
+			// A placement requested last frame has now been applied - stop
+			// forcing it.
 			slot.hints.pos_x = -1.0f;
 			slot.hints.pos_y = -1.0f;
 
-			SavePinIfDragged(imgui, slot, index);
+			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowPos(&winX, &winY);
+			imgui->GetWindowSize(&winW, &winH);
+			if (winW > 0.0f && winH > 0.0f)
+				slot.rect = { winX, winY, winW, winH, true };
+
+			imgui->GetDisplaySize(&g_displayW, &g_displayH);
+
+			if (index == LeadPin())
+			{
+				// In cascade the lead stays at the back, so a click on it does not
+				// raise it over the title bars of the pins below.
+				slot.hints.extra_window_flags = kPinWindowFlags |
+					(g_pinSettings.cascade ? kWindowFlagsNoBringToFrontOnFocus : 0);
+
+				// On the Right edge the lead keeps its right edge when its window
+				// grows, as it does when the Codex opens and the buttons show.
+				const bool edgeAnchored = g_pinSettings.edge == PinEdge::Right &&
+					!g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0].set;
+				if (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
+					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW))
+					AnchorLead(imgui, slot);
+				SaveLeadIfDragged(imgui, slot);
+				ShowDragCursor(imgui);
+			}
+			else
+			{
+				// Only the lead is moved by hand; the rest follow it.
+				slot.hints.extra_window_flags = kPinWindowFlags | PluginWindowFlags_NoMove;
+
+				float targetX[kMaxPins], targetY[kMaxPins];
+				if (PinTargets(imgui, targetX, targetY))
+				{
+					// Kept on screen; the loader ignores a negative position.
+					slot.hints.pivot_x = 0.0f;
+					slot.hints.pivot_y = 0.0f;
+					slot.hints.pos_cond = 0;
+					slot.hints.pos_x = std::clamp(targetX[index], 0.0f, (std::max)(0.0f, g_displayW - slot.rect.w));
+					slot.hints.pos_y = std::clamp(targetY[index], 0.0f, (std::max)(0.0f, g_displayH - slot.rect.h));
+				}
+			}
 
 			const bool interactive = CodexUIActive(imgui);
 
@@ -1473,6 +1712,8 @@ namespace CodexUI
 				if (imgui->SmallButton("Open"))
 					OpenDetail(info.nativeRecipe);
 				imgui->SameLine(0.0f, 6.0f);
+				RenderLaunchPlannerButton(imgui, info);
+				imgui->SameLine(0.0f, 6.0f);
 				if (imgui->SmallButton("Unpin"))
 					UnpinSlot(index);
 			}
@@ -1505,8 +1746,7 @@ namespace CodexUI
 				slot.hints.pos_y  = -1.0f;
 				slot.hints.size_cond = 0;
 				slot.hints.pos_cond  = 0;
-				slot.hints.extra_window_flags = kWindowFlagsAlwaysAutoResize | PluginWindowFlags_NoSavedSettings |
-					PluginWindowFlags_PauseMenuMouseInputs;
+				slot.hints.extra_window_flags = kPinWindowFlags;
 
 				slot.desc.name        = slot.title;
 				slot.desc.renderFn    = kPinRenderFns[i];
@@ -1591,8 +1831,9 @@ namespace CodexUI
 		if (g_closerWidget)
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
-		LoadPinPositions();
+		LoadPinSettings();
 		RegisterPinSlots(self);
+		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 
 		if (self->hooks->Input)
 		{
@@ -1640,6 +1881,7 @@ namespace CodexUI
 			g_searchWidget = nullptr;
 		}
 
+		self->hooks->UI->UnregisterOnConfigChanged(self, &OnConfigChanged);
 		UnregisterPinSlots(self);
 
 		self->hooks->UI->UnregisterOnPanelWindowClosed(&OnDetailPanelClosed);
