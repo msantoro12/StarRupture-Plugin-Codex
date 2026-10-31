@@ -12,7 +12,8 @@ static IPluginSelf* g_self = nullptr;
 
 IPluginSelf* GetSelf() { return g_self; }
 
-// Drives CodexIcons::Tick() so icon loads/retries happen once per engine tick.
+// Drives CodexIcons::Tick() so icon loads/retries happen once per engine tick, and
+// CodexUI::Tick() so the saved pins are put back once the recipes are ready.
 static void OnEngineTick(float /*deltaSeconds*/)
 {
 	CodexIcons::Tick();

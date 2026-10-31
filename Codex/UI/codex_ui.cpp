@@ -2146,7 +2146,10 @@ namespace CodexUI
 			const int saved = static_cast<int>(keys.size());
 			LOG_INFO("CodexUI: restored %d of %d saved pin(s).", restored, saved);
 
-			if (restored < saved)
+			// Nothing came back: the saved copies are left alone, as the recipe list
+			// may be at fault rather than the saved pins. The next pin or unpin
+			// saves what is up.
+			if (restored > 0 && restored < saved)
 			{
 				// The saved copies match what is up again.
 				if (g_pinSettings.free)

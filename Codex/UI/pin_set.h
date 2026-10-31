@@ -15,8 +15,8 @@ namespace CodexPinSet
 
 	// The keys joined in order. A key that is empty or holds the separator is
 	// skipped (it could not be read back), and so is one that would not fit
-	// in `maxLen` characters, along with every key after it, so the text
-	// always reads back as a leading run of the pins.
+	// in `maxLen` characters, along with every key after it. Real asset names
+	// are never empty and never hold the separator.
 	inline std::string Format(const std::vector<std::string>& keys, size_t maxLen)
 	{
 		std::string text;

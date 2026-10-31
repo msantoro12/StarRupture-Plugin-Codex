@@ -107,7 +107,7 @@ namespace CodexConfig
 			"PinnedRecipes",
 			ConfigValueType::Hidden,
 			"",
-			"The pinned recipes, as their asset names separated by \";\", in pin order; they are pinned again when the game starts (empty = none)"
+			"The pinned recipes, as their asset names separated by \";\", in pin order; they are pinned again once a save has loaded (empty = none)"
 		},
 		{
 			"Planner",
