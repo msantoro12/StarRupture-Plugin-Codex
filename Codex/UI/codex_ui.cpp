@@ -1506,7 +1506,7 @@ namespace CodexUI
 				next.cascade = _stricmp(newValue, "Cascade") == 0;
 			else if (strcmp(key, "PinLayout") == 0)
 				next.edge = ParsePinEdge(newValue);
-			else if (strcmp(key, "PinGap") == 0)
+			else if (strcmp(key, "PinSpacing") == 0)
 				next.gap = CodexPinLayout::GapFromText(newValue);
 			else if (strcmp(key, "PinCentering") == 0)
 				next.center = _stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0;
