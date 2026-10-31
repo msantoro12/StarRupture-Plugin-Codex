@@ -33,13 +33,15 @@ loader the plugin shows "Needs loader" and stays off.
   margin when one fills -- with a gap between them that `PinGap` can turn off, and `Cascade`
   steps each one a title bar down and in. Pinned windows never block game input. While the
   Codex (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, drag the first
-  pin and the others follow it; the move cursor shows where it can be grabbed. Tile and
+  pin and the others follow it; the move cursor shows where it can be grabbed while the Codex
+  or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
   Cascade each remember where you dropped the first pin, across sessions. Only the first pin
   moves by hand: if you unpin it, the next oldest becomes the first and takes its place. The
   recipe window's **Arrange pins** button forgets the dropped spot for the current arrangement
   and puts the pins back on the edge. Use the Codex to unpin them.
-- **Launch planner** -- the recipe tab and every pinned window have a button that opens a
-  production planner for the recipe's output in your browser. Choose the planner with `Planner`: the StarRupture Planner
+- **Launch planner** -- the recipe tab and every pinned window (while the Codex is open, like
+  Open and Unpin) have a button that opens a production planner for the recipe's output in
+  your browser. Choose the planner with `Planner`: the StarRupture Planner
   (the default) adds the item at one machine's output, starruptureplanner.com and
   starrupturecalc.com open their calculator for the item, and starrupture-planner.com opens
   its planner page (it has no item link). Items a planner does not list open it without an

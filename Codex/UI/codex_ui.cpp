@@ -110,6 +110,7 @@ namespace CodexUI
 		constexpr int kColumnFlagsWidthStretch = 1 << 3;
 		constexpr int kTabItemFlagsSetSelected = 1 << 1;
 		constexpr int kWindowFlagsAlwaysAutoResize = 1 << 6;
+		constexpr int kWindowFlagsNoBringToFrontOnFocus = 1 << 13;
 		constexpr int kMouseCursorResizeAll = 2;
 
 		void OnEscapePressed(EModKey key, EModKeyEvent event);
@@ -1260,6 +1261,7 @@ namespace CodexUI
 		bool  g_pinReanchor = false;
 		float g_pinAnchoredW = 0.0f;
 		float g_pinAnchoredH = 0.0f;
+		float g_pinAnchoredLeadW = 0.0f; // the lead's width when it was last placed
 
 		// One "0.1234,0.5678" entry, with room to spare.
 		constexpr int kPinOffsetBufferSize = 32;
@@ -1267,19 +1269,19 @@ namespace CodexUI
 		// A drop that moves the window less than this is a click, not a drag.
 		constexpr float kPinDragThreshold = 0.5f;
 
-		// A moved anchor that differs by less than this (as a screen fraction)
-		// is the drag's own write coming back, not an edit.
-		constexpr float kPinAnchorTolerance = 0.001f;
+		PinAnchor ParsePinAnchor(const char* text)
+		{
+			PinAnchor anchor;
+			if (sscanf_s(text, "%f,%f", &anchor.x, &anchor.y) == 2)
+				anchor.set = anchor.x >= 0.0f && anchor.x <= 1.0f && anchor.y >= 0.0f && anchor.y <= 1.0f;
+			return anchor;
+		}
 
 		PinAnchor ReadPinAnchor(bool cascade)
 		{
 			char text[kPinOffsetBufferSize];
 			CodexConfig::Config::GetPinOffset(cascade, text, sizeof(text));
-
-			PinAnchor anchor;
-			if (sscanf_s(text, "%f,%f", &anchor.x, &anchor.y) == 2)
-				anchor.set = anchor.x >= 0.0f && anchor.x <= 1.0f && anchor.y >= 0.0f && anchor.y <= 1.0f;
-			return anchor;
+			return ParsePinAnchor(text);
 		}
 
 		void WritePinAnchor(bool cascade, const PinAnchor& anchor)
@@ -1290,36 +1292,60 @@ namespace CodexUI
 			CodexConfig::Config::SetPinOffset(cascade, text);
 		}
 
-		// Reads the pin options. A change to the arrangement, the edge or the
-		// current arrangement's anchor moves the lead pin to match.
-		void LoadPinSettings()
+		PinEdge ParsePinEdge(const char* layout)
 		{
-			PinSettings next;
-			next.cascade = _stricmp(CodexConfig::Config::GetPinArrangement(), "Cascade") == 0;
-
-			const char* layout = CodexConfig::Config::GetPinLayout();
-			next.edge = _stricmp(layout, "Left") == 0 ? PinEdge::Left
+			return _stricmp(layout, "Left") == 0 ? PinEdge::Left
 				: _stricmp(layout, "Top") == 0 ? PinEdge::Top
 				: PinEdge::Right;
+		}
 
-			next.gap = CodexConfig::Config::GetPinGap();
-			next.anchors[0] = ReadPinAnchor(false);
-			next.anchors[1] = ReadPinAnchor(true);
-
+		// Takes up new pin options. A change to the arrangement, the edge or
+		// the current arrangement's anchor moves the lead pin to match.
+		void ApplyPinSettings(const PinSettings& next)
+		{
 			const PinAnchor& before = g_pinSettings.anchors[next.cascade ? 1 : 0];
 			const PinAnchor& after = next.anchors[next.cascade ? 1 : 0];
 			if (next.cascade != g_pinSettings.cascade || next.edge != g_pinSettings.edge ||
-				after.set != before.set ||
-				std::fabs(after.x - before.x) > kPinAnchorTolerance || std::fabs(after.y - before.y) > kPinAnchorTolerance)
+				after.set != before.set || after.x != before.x || after.y != before.y)
 				g_pinReanchor = true;
 
 			g_pinSettings = next;
 		}
 
-		void OnConfigChanged(const char* section, const char*, const char*)
+		// Reads every pin option from the config, at startup.
+		void LoadPinSettings()
 		{
-			if (section && strcmp(section, "Menu") == 0)
-				LoadPinSettings();
+			PinSettings next;
+			next.cascade = _stricmp(CodexConfig::Config::GetPinArrangement(), "Cascade") == 0;
+			next.edge = ParsePinEdge(CodexConfig::Config::GetPinLayout());
+			next.gap = CodexConfig::Config::GetPinGap();
+			next.anchors[0] = ReadPinAnchor(false);
+			next.anchors[1] = ReadPinAnchor(true);
+			ApplyPinSettings(next);
+		}
+
+		// Live edits arrive here with the new value; the config file itself
+		// is only written afterwards.
+		void OnConfigChanged(const char* section, const char* key, const char* newValue)
+		{
+			if (!section || !key || !newValue || strcmp(section, "Menu") != 0)
+				return;
+
+			PinSettings next = g_pinSettings;
+			if (strcmp(key, "PinArrangement") == 0)
+				next.cascade = _stricmp(newValue, "Cascade") == 0;
+			else if (strcmp(key, "PinLayout") == 0)
+				next.edge = ParsePinEdge(newValue);
+			else if (strcmp(key, "PinGap") == 0)
+				next.gap = _stricmp(newValue, "true") == 0 || strcmp(newValue, "1") == 0;
+			else if (strcmp(key, "PinTileOffset") == 0)
+				next.anchors[0] = ParsePinAnchor(newValue);
+			else if (strcmp(key, "PinCascadeOffset") == 0)
+				next.anchors[1] = ParsePinAnchor(newValue);
+			else
+				return;
+
+			ApplyPinSettings(next);
 		}
 
 		bool CodexUIActive(IModLoaderImGui* imgui)
@@ -1395,6 +1421,7 @@ namespace CodexUI
 			imgui->GetDisplaySize(&g_displayW, &g_displayH);
 			g_pinAnchoredW = g_displayW;
 			g_pinAnchoredH = g_displayH;
+			g_pinAnchoredLeadW = slot.rect.w;
 			g_pinReanchor = false;
 
 			slot.hints.pivot_y = 0.0f;
@@ -1596,8 +1623,17 @@ namespace CodexUI
 
 			if (index == LeadPin())
 			{
-				slot.hints.extra_window_flags = kPinWindowFlags;
-				if (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH)
+				// In cascade the lead stays at the back, so a click on it does not
+				// raise it over the title bars of the pins below.
+				slot.hints.extra_window_flags = kPinWindowFlags |
+					(g_pinSettings.cascade ? kWindowFlagsNoBringToFrontOnFocus : 0);
+
+				// On the Right edge the lead keeps its right edge when its window
+				// grows, as it does when the Codex opens and the buttons show.
+				const bool edgeAnchored = g_pinSettings.edge == PinEdge::Right &&
+					!g_pinSettings.anchors[g_pinSettings.cascade ? 1 : 0].set;
+				if (g_pinReanchor || g_displayW != g_pinAnchoredW || g_displayH != g_pinAnchoredH ||
+					(edgeAnchored && slot.rect.w != g_pinAnchoredLeadW))
 					AnchorLead(imgui, slot);
 				SaveLeadIfDragged(imgui, slot);
 				ShowDragCursor(imgui);
@@ -1610,11 +1646,12 @@ namespace CodexUI
 				float targetX[kMaxPins], targetY[kMaxPins];
 				if (PinTargets(imgui, targetX, targetY))
 				{
+					// Kept on screen; the loader ignores a negative position.
 					slot.hints.pivot_x = 0.0f;
 					slot.hints.pivot_y = 0.0f;
 					slot.hints.pos_cond = 0;
-					slot.hints.pos_x = targetX[index];
-					slot.hints.pos_y = targetY[index];
+					slot.hints.pos_x = std::clamp(targetX[index], 0.0f, (std::max)(0.0f, g_displayW - slot.rect.w));
+					slot.hints.pos_y = std::clamp(targetY[index], 0.0f, (std::max)(0.0f, g_displayH - slot.rect.h));
 				}
 			}
 
@@ -1795,8 +1832,8 @@ namespace CodexUI
 			self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 
 		LoadPinSettings();
-		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 		RegisterPinSlots(self);
+		self->hooks->UI->RegisterOnConfigChanged(self, &OnConfigChanged);
 
 		if (self->hooks->Input)
 		{

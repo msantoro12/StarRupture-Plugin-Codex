@@ -62,20 +62,6 @@ namespace CodexConfig
 			"Top edge of the search box as a fraction of the screen height; -1 centres it. Drag the box to set"
 		},
 		{
-			"Planner",
-			"Planner",
-			ConfigValueType::String,
-			"StarRupture Planner",
-			"Planner the Launch planner button opens: \"StarRupture Planner\", \"starruptureplanner.com\", \"starrupturecalc.com\", \"starrupture-planner.com\" or \"Custom\""
-		},
-		{
-			"Planner",
-			"CustomUrlTemplate",
-			ConfigValueType::String,
-			"",
-			"Custom planner address; {item} becomes the StarRupture Planner's item id, {name} the item's display name and {game} the game's internal item name"
-		},
-		{
 			"Menu",
 			"PinTileOffset",
 			ConfigValueType::String,
@@ -88,6 +74,20 @@ namespace CodexConfig
 			ConfigValueType::String,
 			"",
 			"Where the first pinned recipe was last dragged to while cascading, as a screen-fraction \"x,y\" (empty = not moved). Clear to reset"
+		},
+		{
+			"Planner",
+			"Planner",
+			ConfigValueType::String,
+			"StarRupture Planner",
+			"Planner the Launch planner button opens: \"StarRupture Planner\", \"starruptureplanner.com\", \"starrupturecalc.com\", \"starrupture-planner.com\" or \"Custom\""
+		},
+		{
+			"Planner",
+			"CustomUrlTemplate",
+			ConfigValueType::String,
+			"",
+			"Custom planner address; {item} becomes the StarRupture Planner's item id, {name} the item's display name and {game} the game's internal item name"
 		}
 	};
 
