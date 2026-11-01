@@ -2411,13 +2411,17 @@ namespace CodexUI
 		}
 
 		// Pinned cards show their edit controls (the unpin X, Open and Planner)
-		// while the Codex is open or the game's Escape menu is.
+		// while the Codex is open, the game's Escape menu is, or a loader or
+		// plugin window holds the cursor (the mod loader menu).
 		bool PinsEditable(IModLoaderImGui* imgui)
 		{
 			if (CodexUIActive(imgui))
 				return true;
 			IPluginHooks* hooks = GetHooks();
-			return hooks && hooks->GameMenu && hooks->GameMenu->IsPauseMenuOpen();
+			if (!hooks)
+				return false;
+			return (hooks->GameMenu && hooks->GameMenu->IsPauseMenuOpen())
+				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
