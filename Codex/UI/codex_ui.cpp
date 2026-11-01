@@ -920,11 +920,11 @@ namespace CodexUI
 			}
 		}
 
-		// The Launch planner button, shared by the recipe tab and the pinned
+		// The Planner button, shared by the recipe tab and the pinned
 		// windows.
 		void RenderLaunchPlannerButton(IModLoaderImGui* imgui, const CodexRecipes::RecipeInfo& info)
 		{
-			if (imgui->SmallButton("Launch planner"))
+			if (imgui->SmallButton("Planner"))
 				CodexPlanner::Launch(info.output.uniqueItemName, info.output.displayName);
 			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 		}
@@ -1216,7 +1216,7 @@ namespace CodexUI
 		// modloader's F2 overlay, the Escape menu) any pin can be dragged and
 		// the others follow it, tiled or cascaded (Grouped), or every pin is
 		// dragged on its own (Ungrouped); the
-		// Open/Launch planner/Unpin buttons only show while the Codex itself
+		// Open/Planner buttons and the close X only show while the Codex itself
 		// is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
@@ -2366,6 +2366,19 @@ namespace CodexUI
 			lead.grabY = g_pinGrab.mouseY - posY;
 		}
 
+		// The X in a pinned window's top-right corner; true when it is clicked.
+		// Pinned to the right edge the way the other plugins pin their markers.
+		bool RenderUnpinX(IModLoaderImGui* imgui)
+		{
+			imgui->SameLine(0.0f, -1.0f);
+			float availX = 0.0f, availY = 0.0f;
+			imgui->GetContentRegionAvail(&availX, &availY);
+			imgui->SetCursorPosX(imgui->GetCursorPosX() + availX - imgui->GetFrameHeight());
+			const bool clicked = imgui->SmallButton("X");
+			imgui->SetItemTooltip("Unpin this recipe.");
+			return clicked;
+		}
+
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
 		{
 			PinSlot& slot = g_pins[index];
@@ -2444,7 +2457,7 @@ namespace CodexUI
 			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
 			{
 				imgui->TextDisabled("Recipe unavailable.");
-				if (interactive && imgui->SmallButton("Unpin"))
+				if (interactive && RenderUnpinX(imgui))
 					UnpinSlot(index);
 				return;
 			}
@@ -2455,6 +2468,7 @@ namespace CodexUI
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
 			imgui->TextDisabled(line);
+			const bool unpinClicked = interactive && RenderUnpinX(imgui);
 
 			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
 			{
@@ -2496,10 +2510,10 @@ namespace CodexUI
 					OpenDetail(info.nativeRecipe);
 				imgui->SameLine(0.0f, 6.0f);
 				RenderLaunchPlannerButton(imgui, info);
-				imgui->SameLine(0.0f, 6.0f);
-				if (imgui->SmallButton("Unpin"))
-					UnpinSlot(index);
 			}
+
+			if (unpinClicked)
+				UnpinSlot(index);
 		}
 
 		template <int Index>
