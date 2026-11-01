@@ -1216,8 +1216,8 @@ namespace CodexUI
 		// modloader's F2 overlay, the Escape menu) any pin can be dragged and
 		// the others follow it, tiled or cascaded (Grouped), or every pin is
 		// dragged on its own (Ungrouped); the
-		// Open/Planner buttons and the close X only show while the Codex itself
-		// is open.
+		// Open/Planner buttons and the close X on the title bar only show while
+		// the Codex itself or the Escape menu is open.
 		//
 		// Widget render callbacks carry no user data, so a fixed pool of
 		// slots each gets its own template-instantiated callback.
@@ -2366,17 +2366,58 @@ namespace CodexUI
 			lead.grabY = g_pinGrab.mouseY - posY;
 		}
 
-		// The X in a pinned window's top-right corner; true when it is clicked.
-		// Pinned to the right edge the way the other plugins pin their markers.
+		// ImGui's ImGuiCol_ indices for the close button's colors.
+		constexpr int kColText          = 0;
+		constexpr int kColButtonHovered = 22;
+		constexpr int kColButtonActive  = 23;
+
+		// The X at the right end of a pinned window's title bar, drawn and
+		// hit-tested where ImGui puts a window's own close button (widget
+		// windows are begun without p_open, so they have none). True when it is
+		// clicked.
 		bool RenderUnpinX(IModLoaderImGui* imgui)
 		{
-			imgui->SameLine(0.0f, -1.0f);
-			float availX = 0.0f, availY = 0.0f;
-			imgui->GetContentRegionAvail(&availX, &availY);
-			imgui->SetCursorPosX(imgui->GetCursorPosX() + availX - imgui->GetFrameHeight());
-			const bool clicked = imgui->SmallButton("X");
-			imgui->SetItemTooltip("Unpin this recipe.");
+			float winX = 0.0f, winY = 0.0f, winW = 0.0f, winH = 0.0f;
+			imgui->GetWindowPos(&winX, &winY);
+			imgui->GetWindowSize(&winW, &winH);
+
+			const float size = imgui->GetFontSize();
+			const float pad  = (imgui->GetFrameHeight() - size) * 0.5f;
+			const float minX = winX + winW - pad - size;
+			const float minY = winY + pad;
+			const float maxX = minX + size;
+			const float maxY = minY + size;
+
+			const bool hovered = imgui->IsWindowHovered(0) && imgui->IsMouseHoveringRect(minX, minY, maxX, maxY, false);
+			const bool clicked = hovered && imgui->IsMouseClicked(0, false);
+
+			// The window's draw list is clipped to the content area, below the
+			// title bar.
+			PluginDrawList dl = imgui->GetWindowDrawList();
+			imgui->PushClipRect(winX, winY, winX + winW, winY + winH, false);
+			const float cx = (minX + maxX) * 0.5f;
+			const float cy = (minY + maxY) * 0.5f;
+			if (hovered)
+				imgui->DL_AddCircleFilled(dl, cx, cy, size * 0.5f + 1.0f,
+					imgui->GetColorU32FromCol(clicked ? kColButtonActive : kColButtonHovered, 1.0f), 12);
+			const unsigned int col = imgui->GetColorU32FromCol(kColText, 1.0f);
+			const float r = size * 0.5f * 0.5f;
+			imgui->DL_AddLine(dl, cx - r, cy - r, cx + r, cy + r, col, 1.0f);
+			imgui->DL_AddLine(dl, cx - r, cy + r, cx + r, cy - r, col, 1.0f);
+			imgui->PopClipRect();
+			if (hovered)
+				imgui->SetTooltip("Unpin this recipe.");
 			return clicked;
+		}
+
+		// Pinned cards show their edit controls (the unpin X, Open and Planner)
+		// while the Codex is open or the game's Escape menu is.
+		bool PinsEditable(IModLoaderImGui* imgui)
+		{
+			if (CodexUIActive(imgui))
+				return true;
+			IPluginHooks* hooks = GetHooks();
+			return hooks && hooks->GameMenu && hooks->GameMenu->IsPauseMenuOpen();
 		}
 
 		void RenderPinSlot(int index, IModLoaderImGui* imgui)
@@ -2451,7 +2492,7 @@ namespace CodexUI
 			if (index == 0)
 				StepPinGlides();
 
-			const bool interactive = CodexUIActive(imgui);
+			const bool interactive = PinsEditable(imgui);
 
 			CodexRecipes::RecipeInfo info;
 			if (!slot.nativeRecipe || !CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, info))
