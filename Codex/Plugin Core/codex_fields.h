@@ -11,6 +11,7 @@
 #include "plugin_map.h"
 
 #include <string>
+#include <vector>
 
 // Every member of a game class Codex reads, taken from the loader's map for the
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
@@ -36,10 +37,38 @@ namespace CodexFields
 	inline auto CraftingParameters = CODEX_FIELD(UCrBuildingCraftingTrait, CraftingParameters);
 	inline auto CrafterToRecipeMap = CODEX_FIELD(ACrCraftingRecipeOwner, CrafterToRecipeMap);
 
+	// Members of the structs the codex steps through
+	inline auto ItemCount          = CODEX_FIELD(FAuSimpleItem, Count);
+	inline auto ItemData           = CODEX_FIELD(FAuSimpleItem, ItemDataBase);
+	inline auto LinkedList         = CODEX_FIELD(FNestedItemRecipeCollectionArray, Collections);
+	inline auto EntityConfigPtr    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfigPtr);
+	inline auto EntityConfigRef    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfig);
+	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
+
 	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
 	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
+
+	// The SDK's helpers, under the names the plugin uses.
+	using PluginMap::KeysOf;
+	using PluginMap::ValueOr;
+
+	// The whole codex reads these members, so the plugin has one feature. Off,
+	// the plugin loads but builds no recipe database and opens no window; the
+	// menu and planner config entries are greyed out.
+	inline PluginMap::Feature RecipeCodex{ "codex", "Recipe codex",
+		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
+			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
+			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
+			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
+		{ "Menu.*", "Planner.*" } };
+
+	// Call before Resolve, so a miss lands on the feature and not on the plugin.
+	inline void DeclareFeatures(IPluginSelf* self, IPluginHookScanner* scanner)
+	{
+		PluginMap::DeclareFeatures(scanner, self, RecipeCodex);
+	}
 
 	// Asks the loader for every row above. False when any did not resolve; the
 	// loader has then recorded the failure and refuses the plugin.
@@ -48,15 +77,19 @@ namespace CodexFields
 		return PluginMap::ResolveFields(scanner, self,
 			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
+			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
 			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
 	}
 
-	// The member's value, or a fallback when the member did not resolve.
-	template <class T, class Object>
-	T ValueOr(const PluginField<T>& field, const Object* object, T fallback = T{})
+	// A stack's item type and its count, or null / zero when unresolved.
+	inline SDK::UAuItemDataBase* ItemOf(const SDK::FAuSimpleItem& item)
 	{
-		const T* at = field.In(static_cast<const void*>(object));
-		return at ? *at : fallback;
+		return ValueOr<SDK::UAuItemDataBase*>(ItemData, &item);
+	}
+
+	inline int32_t CountOf(const SDK::FAuSimpleItem& item)
+	{
+		return ValueOr<int32_t>(ItemCount, &item);
 	}
 
 	// An item's unique name and its localized name. Empty when unresolved.

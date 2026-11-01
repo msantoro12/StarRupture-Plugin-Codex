@@ -50,9 +50,7 @@ static PluginInfo s_pluginInfo = {
 	PLUGIN_INTERFACE_VERSION,
 	PLUGIN_TARGET_CLIENT,
 	PLUGIN_GAME_BUILT_CL,
-	// PLUGIN_MAP_MIGRATED is not set yet: it waits on the loader's admission by
-	// built CL and the CI check of the used set.
-	0
+	PLUGIN_MAP_MIGRATED
 };
 
 extern "C" {
@@ -66,6 +64,7 @@ extern "C" {
 	// which the loader accepts a field request. Resolve here, read from PluginInit.
 	__declspec(dllexport) void OnPluginLoadHooks(IPluginSelf* self, IPluginHookScanner* scanner)
 	{
+		CodexFields::DeclareFeatures(self, scanner);
 		CodexFields::Resolve(self, scanner);
 	}
 
@@ -88,6 +87,12 @@ extern "C" {
 		{
 			LOG_WARN("Plugin is disabled in config file");
 			return true; // Return true so plugin loads but doesn't activate
+		}
+
+		if (!CodexFields::RecipeCodex.On())
+		{
+			LOG_WARN("The recipe codex is off: the game update moved something it reads");
+			return true;
 		}
 
 		// Kick off the asset-registry scan that pre-loads item/recipe icons
