@@ -66,6 +66,7 @@ extern "C" {
 	// which the loader accepts a field request. Resolve here, read from PluginInit.
 	__declspec(dllexport) void OnPluginLoadHooks(IPluginSelf* self, IPluginHookScanner* scanner)
 	{
+		CodexFields::DeclareFeatures(self, scanner);
 		CodexFields::Resolve(self, scanner);
 	}
 
@@ -88,6 +89,12 @@ extern "C" {
 		{
 			LOG_WARN("Plugin is disabled in config file");
 			return true; // Return true so plugin loads but doesn't activate
+		}
+
+		if (!CodexFields::RecipeCodex.On())
+		{
+			LOG_WARN("The recipe codex is off: the game update moved something it reads");
+			return true;
 		}
 
 		// Kick off the asset-registry scan that pre-loads item/recipe icons

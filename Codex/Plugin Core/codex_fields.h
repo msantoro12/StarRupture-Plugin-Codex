@@ -41,6 +41,25 @@ namespace CodexFields
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
+	// The whole codex reads these members, so the plugin has one feature. Off,
+	// the plugin loads but builds no recipe database and opens no window; the
+	// menu and planner config entries are greyed out.
+	inline PluginMap::Feature RecipeCodex{ "codex", "Recipe codex",
+		{ "UAuItemDataBase::UIItemType", "UAuItemDataBase::UniqueItemName", "UAuItemDataBase::ItemName",
+		  "UAuItemDataBase::ItemIcon", "UAuActorPlacementData::EntityType", "UCrBuildingData::Type",
+		  "UCrBuildingData::BuildingName", "UCrItemRecipeCollectionSubsystem::LinkedCollections",
+		  "UCrItemRecipeCollection::Recipes", "UAuItemRecipeData::BuildTime", "UCrItemRecipeData::DisplayText",
+		  "UCrBuildingCraftingTrait::CraftingParameters", "ACrCraftingRecipeOwner::CrafterToRecipeMap",
+		  "FAuSimpleItem", "FAuAPMassSpawnedEntityType", "FCrCraftingParameters",
+		  "FNestedItemRecipeCollectionArray" },
+		{ "Menu.*", "Planner.*" } };
+
+	// Call before Resolve, so a miss lands on the feature and not on the plugin.
+	inline void DeclareFeatures(IPluginSelf* self, IPluginHookScanner* scanner)
+	{
+		PluginMap::DeclareFeatures(scanner, self, RecipeCodex);
+	}
+
 	// Asks the loader for every row above. False when any did not resolve; the
 	// loader has then recorded the failure and refuses the plugin.
 	inline bool Resolve(IPluginSelf* self, IPluginHookScanner* scanner)
