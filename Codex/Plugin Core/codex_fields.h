@@ -11,6 +11,7 @@
 #include "plugin_map.h"
 
 #include <string>
+#include <vector>
 
 // Every member of a game class Codex reads, taken from the loader's map for the
 // running game build (see plugin_map.h). Resolved once in OnPluginLoadHooks;
@@ -36,22 +37,38 @@ namespace CodexFields
 	inline auto CraftingParameters = CODEX_FIELD(UCrBuildingCraftingTrait, CraftingParameters);
 	inline auto CrafterToRecipeMap = CODEX_FIELD(ACrCraftingRecipeOwner, CrafterToRecipeMap);
 
+	// Members of the structs the codex steps through
+	inline auto ItemCount          = CODEX_FIELD(FAuSimpleItem, Count);
+	inline auto ItemData           = CODEX_FIELD(FAuSimpleItem, ItemDataBase);
+	inline auto LinkedList         = CODEX_FIELD(FNestedItemRecipeCollectionArray, Collections);
+	inline auto EntityConfigPtr    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfigPtr);
+	inline auto EntityConfigRef    = CODEX_FIELD(FAuAPMassSpawnedEntityType, EntityConfig);
+	inline auto RecipeCollection   = CODEX_FIELD(FCrCraftingParameters, RecipeCollection);
+
 	inline auto SimpleItemSize        = SR_SIZE_CHECK(FAuSimpleItem);
 	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
+	// The map keys of a feature's fields, as the loader sees them.
+	inline void AddKey(std::vector<const char*>& keys, const PluginFieldSpec& field) { keys.push_back(field.key); }
+
+	template <class... Key>
+	std::vector<const char*> KeysOf(const Key&... keys)
+	{
+		std::vector<const char*> all;
+		(AddKey(all, keys), ...);
+		return all;
+	}
+
 	// The whole codex reads these members, so the plugin has one feature. Off,
 	// the plugin loads but builds no recipe database and opens no window; the
 	// menu and planner config entries are greyed out.
 	inline PluginMap::Feature RecipeCodex{ "codex", "Recipe codex",
-		{ "UAuItemDataBase::UIItemType", "UAuItemDataBase::UniqueItemName", "UAuItemDataBase::ItemName",
-		  "UAuItemDataBase::ItemIcon", "UAuActorPlacementData::EntityType", "UCrBuildingData::Type",
-		  "UCrBuildingData::BuildingName", "UCrItemRecipeCollectionSubsystem::LinkedCollections",
-		  "UCrItemRecipeCollection::Recipes", "UAuItemRecipeData::BuildTime", "UCrItemRecipeData::DisplayText",
-		  "UCrBuildingCraftingTrait::CraftingParameters", "ACrCraftingRecipeOwner::CrafterToRecipeMap",
-		  "FAuSimpleItem", "FAuAPMassSpawnedEntityType", "FCrCraftingParameters",
-		  "FNestedItemRecipeCollectionArray" },
+		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
+			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
+			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
+			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
 		{ "Menu.*", "Planner.*" } };
 
 	// Call before Resolve, so a miss lands on the feature and not on the plugin.
@@ -67,6 +84,7 @@ namespace CodexFields
 		return PluginMap::ResolveFields(scanner, self,
 			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
+			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
 			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
 	}
 
@@ -76,6 +94,17 @@ namespace CodexFields
 	{
 		const T* at = field.In(static_cast<const void*>(object));
 		return at ? *at : fallback;
+	}
+
+	// A stack's item type and its count, or null / zero when unresolved.
+	inline SDK::UAuItemDataBase* ItemOf(const SDK::FAuSimpleItem& item)
+	{
+		return ValueOr<SDK::UAuItemDataBase*>(ItemData, &item);
+	}
+
+	inline int32_t CountOf(const SDK::FAuSimpleItem& item)
+	{
+		return ValueOr<int32_t>(ItemCount, &item);
 	}
 
 	// An item's unique name and its localized name. Empty when unresolved.

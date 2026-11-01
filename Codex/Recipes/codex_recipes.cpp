@@ -92,12 +92,12 @@ namespace CodexRecipes
 		RecipeItemRef MakeItemRef(const SDK::FAuSimpleItem& simpleItem)
 		{
 			RecipeItemRef ref;
-			ref.count = simpleItem.Count;
+			ref.count = CodexFields::CountOf(simpleItem);
 
-			if (simpleItem.ItemDataBase)
+			if (SDK::UAuItemDataBase* itemData = CodexFields::ItemOf(simpleItem))
 			{
-				ref.uniqueItemName = CodexFields::UniqueNameOf(simpleItem.ItemDataBase);
-				ref.displayName    = CodexFields::DisplayNameOf(simpleItem.ItemDataBase);
+				ref.uniqueItemName = CodexFields::UniqueNameOf(itemData);
+				ref.displayName    = CodexFields::DisplayNameOf(itemData);
 				if (ref.displayName.empty())
 					ref.displayName = ref.uniqueItemName;
 			}
@@ -161,7 +161,10 @@ namespace CodexRecipes
 							continue;
 
 						CollectionList& linked = result[base];
-						for (SDK::UCrItemRecipeCollection* extra : pair.Value().Collections)
+						const auto* extras = CodexFields::LinkedList.In(&pair.Value());
+						if (!extras)
+							continue;
+						for (SDK::UCrItemRecipeCollection* extra : *extras)
 						{
 							if (extra && std::find(linked.begin(), linked.end(), extra) == linked.end())
 							{
@@ -339,12 +342,13 @@ namespace CodexRecipes
 			if (!entityType)
 				return CollectionLookup::NoConfig;
 
-			SDK::UMassEntityConfigAsset* config = entityType->EntityConfigPtr;
-			if (!config)
-				config = entityType->EntityConfig.Get();
-			if (!config)
+			SDK::UMassEntityConfigAsset* config = CodexFields::ValueOr<SDK::UMassEntityConfigAsset*>(CodexFields::EntityConfigPtr, entityType);
+			const auto* configRef = CodexFields::EntityConfigRef.In(entityType);
+			if (!config && configRef)
+				config = configRef->Get();
+			if (!config && configRef)
 			{
-				const auto& path = entityType->EntityConfig.ObjectID.AssetPath;
+				const auto& path = configRef->ObjectID.AssetPath;
 				config = static_cast<SDK::UMassEntityConfigAsset*>(LoadAsset(
 					path.PackageName.GetRawString(), path.AssetName.ToString(), SDK::UMassEntityConfigAsset::StaticClass()));
 			}
@@ -359,7 +363,7 @@ namespace CodexRecipes
 					if (trait && trait->IsA(traitClass))
 					{
 						const auto* parameters = CodexFields::CraftingParameters.In(static_cast<SDK::UCrBuildingCraftingTrait*>(trait));
-						outCollection = parameters ? parameters->RecipeCollection : nullptr;
+						outCollection = CodexFields::ValueOr<SDK::UCrItemRecipeCollection*>(CodexFields::RecipeCollection, parameters);
 						return outCollection ? CollectionLookup::Found : CollectionLookup::NoCollection;
 					}
 				}
@@ -554,14 +558,15 @@ namespace CodexRecipes
 				return false;
 			}
 
-			if (!outputItem.ItemDataBase)
+			SDK::UAuItemDataBase* outputData = CodexFields::ItemOf(outputItem);
+			if (!outputData)
 			{
 				outReason = "output item is null";
 				return false;
 			}
-			if (IsBlueprintItem(outputItem.ItemDataBase))
+			if (IsBlueprintItem(outputData))
 			{
-				outReason = "output item '" + CodexFields::UniqueNameOf(outputItem.ItemDataBase) + "' is a BlueprintItem";
+				outReason = "output item '" + CodexFields::UniqueNameOf(outputData) + "' is a BlueprintItem";
 				return false;
 			}
 
@@ -576,10 +581,10 @@ namespace CodexRecipes
 			{
 				for (const SDK::FAuSimpleItem& resource : recipe->GetNeededResources())
 				{
-					if (IsBlueprintItem(resource.ItemDataBase))
+					if (IsBlueprintItem(CodexFields::ItemOf(resource)))
 					{
 						LOG_TRACE("CodexRecipes: [recipe] %s - dropped input '%s' (BlueprintItem).",
-							recipeName.c_str(), CodexFields::UniqueNameOf(resource.ItemDataBase).c_str());
+							recipeName.c_str(), CodexFields::UniqueNameOf(CodexFields::ItemOf(resource)).c_str());
 						continue;
 					}
 					RecipeItemRef inputRef = MakeItemRef(resource);
