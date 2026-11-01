@@ -1,5 +1,6 @@
 #include "codex_recipes.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
+#include "Plugin Core/codex_fields.h"
 
 #include "Chimera_classes.hpp"
 #include "Chimera_structs.hpp"
@@ -84,7 +85,8 @@ namespace CodexRecipes
 		// filter them out of the Codex.
 		bool IsBlueprintItem(SDK::UAuItemDataBase* item)
 		{
-			return item && item->UIItemType == SDK::EUIItemType::BlueprintItem;
+			const SDK::EUIItemType* type = CodexFields::UIItemType.In(item);
+			return type && *type == SDK::EUIItemType::BlueprintItem;
 		}
 
 		RecipeItemRef MakeItemRef(const SDK::FAuSimpleItem& simpleItem)
@@ -94,8 +96,8 @@ namespace CodexRecipes
 
 			if (simpleItem.ItemDataBase)
 			{
-				ref.uniqueItemName = simpleItem.ItemDataBase->UniqueItemName.ToString();
-				ref.displayName    = SDK::UKismetTextLibrary::Conv_TextToString(simpleItem.ItemDataBase->ItemName).ToString();
+				ref.uniqueItemName = CodexFields::UniqueNameOf(simpleItem.ItemDataBase);
+				ref.displayName    = CodexFields::DisplayNameOf(simpleItem.ItemDataBase);
 				if (ref.displayName.empty())
 					ref.displayName = ref.uniqueItemName;
 			}
@@ -149,7 +151,10 @@ namespace CodexRecipes
 
 				try
 				{
-					for (auto& pair : subsystem->LinkedCollections)
+					auto* linkedMap = CodexFields::LinkedCollections.In(subsystem);
+					if (!linkedMap)
+						continue;
+					for (auto& pair : *linkedMap)
 					{
 						SDK::UCrItemRecipeCollection* base = pair.Key();
 						if (!base)
@@ -330,12 +335,16 @@ namespace CodexRecipes
 		{
 			outCollection = nullptr;
 
-			SDK::UMassEntityConfigAsset* config = building->EntityType.EntityConfigPtr;
+			const auto* entityType = CodexFields::EntityType.In(building);
+			if (!entityType)
+				return CollectionLookup::NoConfig;
+
+			SDK::UMassEntityConfigAsset* config = entityType->EntityConfigPtr;
 			if (!config)
-				config = building->EntityType.EntityConfig.Get();
+				config = entityType->EntityConfig.Get();
 			if (!config)
 			{
-				const auto& path = building->EntityType.EntityConfig.ObjectID.AssetPath;
+				const auto& path = entityType->EntityConfig.ObjectID.AssetPath;
 				config = static_cast<SDK::UMassEntityConfigAsset*>(LoadAsset(
 					path.PackageName.GetRawString(), path.AssetName.ToString(), SDK::UMassEntityConfigAsset::StaticClass()));
 			}
@@ -349,7 +358,8 @@ namespace CodexRecipes
 				{
 					if (trait && trait->IsA(traitClass))
 					{
-						outCollection = static_cast<SDK::UCrBuildingCraftingTrait*>(trait)->CraftingParameters.RecipeCollection;
+						const auto* parameters = CodexFields::CraftingParameters.In(static_cast<SDK::UCrBuildingCraftingTrait*>(trait));
+						outCollection = parameters ? parameters->RecipeCollection : nullptr;
 						return outCollection ? CollectionLookup::Found : CollectionLookup::NoCollection;
 					}
 				}
@@ -364,7 +374,7 @@ namespace CodexRecipes
 		// walls and foundations for nothing.
 		bool CanSkipBuildingType(SDK::UCrBuildingData* building)
 		{
-			switch (building->Type)
+			switch (CodexFields::TypeOf(building))
 			{
 			case SDK::ECrBuildingType::Habitat:
 			case SDK::ECrBuildingType::Power:
@@ -384,11 +394,12 @@ namespace CodexRecipes
 			std::vector<CraftingBuilding> result;
 			std::unordered_set<SDK::UCrBuildingData*> seen;
 
-			if (auto* owner = FindFirstInstance<SDK::ACrCraftingRecipeOwner>("CrCraftingRecipeOwner"))
+			auto* owner = FindFirstInstance<SDK::ACrCraftingRecipeOwner>("CrCraftingRecipeOwner");
+			if (auto* recipeMap = CodexFields::CrafterToRecipeMap.In(owner))
 			{
 				try
 				{
-					for (auto& pair : owner->CrafterToRecipeMap)
+					for (auto& pair : *recipeMap)
 					{
 						SDK::UCrBuildingData*         building   = pair.Key();
 						SDK::UCrItemRecipeCollection* collection = pair.Value();
@@ -430,7 +441,7 @@ namespace CodexRecipes
 					{
 						++skippedType;
 						LOG_TRACE("CodexRecipes: [building] %s (asset scan) - FILTERED: non-crafting building type %d.",
-							building->GetName().c_str(), static_cast<int>(building->Type));
+							building->GetName().c_str(), static_cast<int>(CodexFields::TypeOf(building)));
 						continue;
 					}
 
@@ -451,14 +462,14 @@ namespace CodexRecipes
 					if (skipReason)
 					{
 						LOG_TRACE("CodexRecipes: [building] %s (asset scan, type %d) - FILTERED: %s.",
-							building->GetName().c_str(), static_cast<int>(building->Type), skipReason);
+							building->GetName().c_str(), static_cast<int>(CodexFields::TypeOf(building)), skipReason);
 						continue;
 					}
 
 					seen.insert(building);
 					result.push_back({ building, collection });
 					LOG_INFO("CodexRecipes: + %s (type %d) -> %s",
-						building->GetName().c_str(), static_cast<int>(building->Type), collection->GetName().c_str());
+						building->GetName().c_str(), static_cast<int>(CodexFields::TypeOf(building)), collection->GetName().c_str());
 				}
 			}
 			catch (...)
@@ -486,10 +497,13 @@ namespace CodexRecipes
 			{
 				if (!source)
 					return;
+				const auto* sourceRecipes = CodexFields::Recipes.In(source);
+				if (!sourceRecipes)
+					return;
 				const std::string sourceName = source->GetName();
 				LOG_TRACE("CodexRecipes: [collection] %s <- %s collection %s (%d recipe slot(s))",
-					buildingName.c_str(), kind, sourceName.c_str(), source->Recipes.Num());
-				for (SDK::UCrItemRecipeData* recipe : source->Recipes)
+					buildingName.c_str(), kind, sourceName.c_str(), sourceRecipes->Num());
+				for (SDK::UCrItemRecipeData* recipe : *sourceRecipes)
 				{
 					if (!recipe)
 					{
@@ -530,7 +544,7 @@ namespace CodexRecipes
 
 			info.nativeRecipe     = static_cast<void*>(recipe);
 			info.key              = recipeName;
-			info.buildTimeSeconds = recipe->BuildTime;
+			info.buildTimeSeconds = CodexFields::ValueOr<float>(CodexFields::RecipeBuildTime, recipe);
 
 			SDK::FAuSimpleItem outputItem;
 			try { outputItem = recipe->GetOutputItem(); }
@@ -547,7 +561,7 @@ namespace CodexRecipes
 			}
 			if (IsBlueprintItem(outputItem.ItemDataBase))
 			{
-				outReason = "output item '" + outputItem.ItemDataBase->UniqueItemName.ToString() + "' is a BlueprintItem";
+				outReason = "output item '" + CodexFields::UniqueNameOf(outputItem.ItemDataBase) + "' is a BlueprintItem";
 				return false;
 			}
 
@@ -565,7 +579,7 @@ namespace CodexRecipes
 					if (IsBlueprintItem(resource.ItemDataBase))
 					{
 						LOG_TRACE("CodexRecipes: [recipe] %s - dropped input '%s' (BlueprintItem).",
-							recipeName.c_str(), resource.ItemDataBase->UniqueItemName.ToString().c_str());
+							recipeName.c_str(), CodexFields::UniqueNameOf(resource.ItemDataBase).c_str());
 						continue;
 					}
 					RecipeItemRef inputRef = MakeItemRef(resource);
@@ -583,7 +597,8 @@ namespace CodexRecipes
 				LOG_TRACE("CodexRecipes: [recipe] %s - exception reading needed resources; inputs may be incomplete.", recipeName.c_str());
 			}
 
-			info.displayName = SDK::UKismetTextLibrary::Conv_TextToString(recipe->DisplayText).ToString();
+			if (const SDK::FText* displayText = CodexFields::RecipeDisplayText.In(recipe))
+				info.displayName = SDK::UKismetTextLibrary::Conv_TextToString(*displayText).ToString();
 			if (info.displayName.empty() || LooksBroken(info.displayName))
 				info.displayName = info.output.displayName;
 
@@ -635,7 +650,9 @@ namespace CodexRecipes
 
 		std::string GetBuildingDisplayName(SDK::UCrBuildingData* building)
 		{
-			std::string name = SDK::UKismetTextLibrary::Conv_TextToString(building->BuildingName).ToString();
+			std::string name;
+			if (const SDK::FText* nameText = CodexFields::BuildingName.In(building))
+				name = SDK::UKismetTextLibrary::Conv_TextToString(*nameText).ToString();
 			if (name.empty() || LooksBroken(name))
 				name = building->GetName();
 			return name;

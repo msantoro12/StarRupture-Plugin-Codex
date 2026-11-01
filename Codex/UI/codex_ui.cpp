@@ -4,6 +4,7 @@
 #include "Icons/codex_icons.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
+#include "Plugin Core/codex_fields.h"
 #include "UI/pin_layout.h"
 #include "UI/pin_set.h"
 
@@ -166,7 +167,7 @@ namespace CodexUI
 
 		bool InChimeraMain()
 		{
-			SDK::UWorld* world = SDK::UWorld::GetWorld();
+			SDK::UWorld* world = PluginSdkRuntime::GetWorld();
 			return world && world->GetName() == "ChimeraMain";
 		}
 
