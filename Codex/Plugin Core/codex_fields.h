@@ -50,16 +50,9 @@ namespace CodexFields
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
-	// The map keys of a feature's fields, as the loader sees them.
-	inline void AddKey(std::vector<const char*>& keys, const PluginFieldSpec& field) { keys.push_back(field.key); }
-
-	template <class... Key>
-	std::vector<const char*> KeysOf(const Key&... keys)
-	{
-		std::vector<const char*> all;
-		(AddKey(all, keys), ...);
-		return all;
-	}
+	// The SDK's helpers, under the names the plugin uses.
+	using PluginMap::KeysOf;
+	using PluginMap::ValueOr;
 
 	// The whole codex reads these members, so the plugin has one feature. Off,
 	// the plugin loads but builds no recipe database and opens no window; the
@@ -86,14 +79,6 @@ namespace CodexFields
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
 			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);
-	}
-
-	// The member's value, or a fallback when the member did not resolve.
-	template <class T, class Object>
-	T ValueOr(const PluginField<T>& field, const Object* object, T fallback = T{})
-	{
-		const T* at = field.In(static_cast<const void*>(object));
-		return at ? *at : fallback;
 	}
 
 	// A stack's item type and its count, or null / zero when unresolved.

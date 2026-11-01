@@ -50,9 +50,7 @@ static PluginInfo s_pluginInfo = {
 	PLUGIN_INTERFACE_VERSION,
 	PLUGIN_TARGET_CLIENT,
 	PLUGIN_GAME_BUILT_CL,
-	// PLUGIN_MAP_MIGRATED is not set yet: it waits on the loader's admission by
-	// built CL and the CI check of the used set.
-	0
+	PLUGIN_MAP_MIGRATED
 };
 
 extern "C" {
