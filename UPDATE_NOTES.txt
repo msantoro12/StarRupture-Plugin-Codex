@@ -1,1 +1,1 @@
-Right-click an item to pin the recipe that makes it: search results, a recipe window's inputs and output, the "used in" list, and the ingredients in a pinned window (while the pins are editable). A recipe already pinned is not pinned again
+Right-click an item to pin the recipe that makes it: search results, a recipe window's inputs and output, the "used in" list, and the ingredients in a pinned window (while the Codex is open). An item whose recipe is already pinned is not pinned again

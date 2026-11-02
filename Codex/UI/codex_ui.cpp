@@ -98,6 +98,7 @@ namespace CodexUI
 		void OnDetailPanelClosed(PanelHandle handle);
 		void PinRecipe(void* nativeRecipe);
 		bool IsPinned(void* nativeRecipe);
+		bool IsProductPinned(const std::string& uniqueItemName);
 		bool HasFreePinSlot();
 
 		std::string ToLower(const std::string& s)
@@ -353,8 +354,9 @@ namespace CodexUI
 
 		// Right-click on the item just drawn pins a recipe: `recipe` when the item
 		// is that recipe's own product, otherwise the one that makes the item.
-		// Items nothing makes (raw resources) do nothing, and PinRecipe already
-		// skips a recipe that is pinned and a full set of pins.
+		// Items nothing makes (raw resources) do nothing, an item some pin already
+		// makes is not pinned again, and PinRecipe skips a recipe that is pinned
+		// and a full set of pins.
 		void PinOnRightClick(IModLoaderImGui* imgui, const std::string& uniqueItemName, void* recipe = nullptr)
 		{
 			if (!imgui->IsItemClicked(1))
@@ -363,7 +365,7 @@ namespace CodexUI
 			if (!recipe)
 			{
 				CodexRecipes::RecipeInfo producer;
-				if (!CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
+				if (IsProductPinned(uniqueItemName) || !CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
 					return;
 				recipe = producer.nativeRecipe;
 			}
@@ -1101,6 +1103,19 @@ namespace CodexUI
 			for (const PinSlot& slot : g_pins)
 			{
 				if (slot.nativeRecipe && slot.nativeRecipe == nativeRecipe)
+					return true;
+			}
+			return false;
+		}
+
+		// True when a pinned recipe makes this item, whichever tier variant of it.
+		bool IsProductPinned(const std::string& uniqueItemName)
+		{
+			for (const PinSlot& slot : g_pins)
+			{
+				CodexRecipes::RecipeInfo pinned;
+				if (slot.nativeRecipe && CodexRecipes::FindByNativeRecipe(slot.nativeRecipe, pinned) &&
+					pinned.output.uniqueItemName == uniqueItemName)
 					return true;
 			}
 			return false;
