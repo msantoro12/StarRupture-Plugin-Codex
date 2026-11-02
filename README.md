@@ -55,11 +55,11 @@ loader the plugin shows "Needs loader" and stays off.
   Escape menu open. An item whose recipe is already pinned is not added twice; items nothing makes
   (raw resources) do nothing.
 - **Pin from the game's menus** -- in the recipe station, the company delivery panel or a
-  machine's menu, hover an item until the game shows its tooltip, then press `Alt`+right-click
+  machine's menu, hover an item until the game shows its tooltip, then right-click
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
-  the item in the open tooltip is pinned, so nothing happens without one. Plain right-click is
-  not the default because the game's item slots have click actions of their own (split,
-  quick transfer, their menus).
+  the item in the open tooltip is pinned, so nothing happens without one. It does nothing while
+  the player's own inventory screen is open, where right-click is the game's own action on a
+  slot. A `GamePinKey` you set earlier is kept.
 - **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -91,7 +91,7 @@ them as plain text fields.
 | `General` | `Enabled` | `true` | Enable or disable Codex |
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
-| `Menu` | `GamePinKey` | `Alt+RightMouseButton` | Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus) |
+| `Menu` | `GamePinKey` | `RightMouseButton` | Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus) |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
 | `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` or `Ungrouped` (dropdown) |

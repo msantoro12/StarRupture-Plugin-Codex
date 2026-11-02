@@ -86,7 +86,8 @@ namespace CodexTooltipPin
 		}
 
 		// The item in the game's open item tooltip, or empty when none is open
-		// or what it shows is not something a recipe makes. One pass over
+		// or what it shows is not something a recipe makes, or the player's own
+		// inventory is open. One pass over
 		// GObjects per press, nothing kept: the tooltip only lives while open.
 		std::string ReadOpenTooltipItem()
 		{
@@ -94,7 +95,8 @@ namespace CodexTooltipPin
 			IPluginObjectProperties* properties = hooks ? hooks->ObjectProperties : nullptr;
 			SDK::UClass* tooltipClass = SDK::UCr_UW_InventoryToolTip::StaticClass();
 			SDK::UClass* anchorClass = SDK::UMenuAnchor::StaticClass();
-			if (!properties || !tooltipClass || !anchorClass)
+			SDK::UClass* screenClass = SDK::UCrUW_InventoryScreen::StaticClass();
+			if (!properties || !tooltipClass || !anchorClass || !screenClass)
 				return {};
 
 			constexpr auto kSkipFlags =
@@ -108,6 +110,7 @@ namespace CodexTooltipPin
 			// lost its Slate widget, and IsVisible is false for it.
 			std::vector<SDK::UUserWidget*> shown;
 			bool anchorOpen = false;
+			bool playerInventoryOpen = false;
 
 			const int count = SDK::UObject::GObjects->Num();
 			for (int i = 0; i < count; ++i)
@@ -122,12 +125,28 @@ namespace CodexTooltipPin
 						static_cast<SDK::UMenuAnchor*>(obj)->IsOpen())
 						anchorOpen = true;
 				}
+				else if (obj->IsA(screenClass))
+				{
+					// The inventory screen also hosts machine menus, which set
+					// the actor being used; the player's own inventory has none.
+					auto* screen = static_cast<SDK::UCommonActivatableWidget*>(obj);
+					SDK::AActor** used = CodexFields::InventoryUsedActor.In(properties, screen);
+					if (screen->IsActivated() && (!used || !*used))
+						playerInventoryOpen = true;
+				}
 				else if (obj->IsA(tooltipClass))
 				{
 					auto* tooltip = static_cast<SDK::UUserWidget*>(obj);
 					if (tooltip->IsVisible())
 						shown.push_back(tooltip);
 				}
+			}
+
+			// Right-click is the game's own action on inventory slots.
+			if (playerInventoryOpen)
+			{
+				LOG_DEBUG("CodexTooltipPin: the player's inventory is open; nothing pinned.");
+				return {};
 			}
 
 			if (!anchorOpen || shown.empty())

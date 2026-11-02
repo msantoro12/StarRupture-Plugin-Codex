@@ -34,7 +34,7 @@ namespace CodexConfig
 			"Menu",
 			"GamePinKey",
 			ConfigValueType::Keybind,
-			"Alt+RightMouseButton",
+			"RightMouseButton",
 			"Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus)"
 		},
 		{
@@ -233,13 +233,13 @@ namespace CodexConfig
 		}
 
 		// Returns the keybind that pins the item in the game's open item tooltip
-		// (default "Alt+RightMouseButton").
+		// (default "RightMouseButton").
 		static const char* GetGamePinKey()
 		{
 			static char buffer[64];
-			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePinKey", buffer, sizeof(buffer), "Alt+RightMouseButton"))
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePinKey", buffer, sizeof(buffer), "RightMouseButton"))
 				return buffer;
-			return "Alt+RightMouseButton";
+			return "RightMouseButton";
 		}
 
 		// Returns the screen edge pins start from: "Right" (default), "Left" or "Top".

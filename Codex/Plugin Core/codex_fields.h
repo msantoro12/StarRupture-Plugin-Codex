@@ -58,6 +58,7 @@ namespace CodexFields
 	inline PluginLazyField<SDK::UTextBlock*>  TooltipItemName{ "ItemName" };         // WBP_HeaderLine_C: the item's name
 	inline PluginLazyField<SDK::UImage*>      TooltipIcon{ "Icon" };                 // Cr_UW_InventoryToolTip: the item's icon
 	inline PluginLazyField<SDK::FSlateBrush>  ImageBrush{ "Brush" };                 // UImage
+	inline PluginLazyField<SDK::AActor*>      InventoryUsedActor{ "InteractedActor" }; // CrUW_InventoryScreen: the machine in use, null for the player's own inventory
 
 	// The SDK's helpers, under the names the plugin uses.
 	using PluginMap::KeysOf;
