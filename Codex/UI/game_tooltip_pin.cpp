@@ -56,8 +56,10 @@ namespace CodexTooltipPin
 		}
 
 		// The item the tooltip shows, among the items a recipe makes: by its
-		// title, and by its icon where the title is missing or names more than
-		// one item. Empty when that leaves anything but exactly one.
+		// title, and by its icon where the title is unreadable or names more than
+		// one item. A title naming no product (a raw resource) gives nothing, so
+		// an icon it shares with a product cannot pin that product. Empty when
+		// that leaves anything but exactly one.
 		std::string MatchProduct(const std::string& title, const void* texture)
 		{
 			std::vector<std::string> byName;
@@ -79,7 +81,7 @@ namespace CodexTooltipPin
 				if (std::find(byIcon.begin(), byIcon.end(), item) != byIcon.end())
 					both.push_back(item);
 
-			const std::vector<std::string>& picked = byName.empty() ? byIcon : both;
+			const std::vector<std::string>& picked = title.empty() ? byIcon : both;
 			return picked.size() == 1 ? picked.front() : std::string();
 		}
 
@@ -177,7 +179,7 @@ namespace CodexTooltipPin
 			if (item.empty())
 				return;
 
-			LOG_INFO("CodexTooltipPin: pinning the recipe for '%s' from the game's tooltip.", item.c_str());
+			LOG_INFO("CodexTooltipPin: pin asked for '%s' from the game's tooltip (skipped if a pin already makes it).", item.c_str());
 			CodexUI::PinProductOf(item);
 		}
 	}
