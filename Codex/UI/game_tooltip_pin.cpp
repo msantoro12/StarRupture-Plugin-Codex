@@ -129,9 +129,10 @@ namespace CodexTooltipPin
 				{
 					// The inventory screen also hosts machine menus, which set
 					// the actor being used; the player's own inventory has none.
-					auto* screen = static_cast<SDK::UCommonActivatableWidget*>(obj);
+					auto* screen = static_cast<SDK::UUserWidget*>(obj);
+					bool* active = CodexFields::InventoryActive.In(properties, screen);
 					SDK::AActor** used = CodexFields::InventoryUsedActor.In(properties, screen);
-					if (screen->IsActivated() && (!used || !*used))
+					if (screen->IsVisible() && (!active || *active) && (!used || !*used))
 						playerInventoryOpen = true;
 				}
 				else if (obj->IsA(tooltipClass))
