@@ -132,8 +132,11 @@ namespace CodexTooltipPin
 					auto* screen = static_cast<SDK::UUserWidget*>(obj);
 					bool* active = CodexFields::InventoryActive.In(properties, screen);
 					SDK::AActor** used = CodexFields::InventoryUsedActor.In(properties, screen);
-					if (screen->IsVisible() && (!active || *active) && (!used || !*used))
-						playerInventoryOpen = true;
+					if (screen->IsVisible() && (!active || *active) && used)
+					{
+						playerInventoryOpen = !*used;
+						LOG_INFO("CodexTooltipPin: the inventory screen is up (machine in use: %d).", *used ? 1 : 0);
+					}
 				}
 				else if (obj->IsA(tooltipClass))
 				{
