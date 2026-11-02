@@ -4,6 +4,7 @@
 #include "Icons/codex_icons.h"
 #include "Recipes/codex_recipes.h"
 #include "UI/codex_ui.h"
+#include "UI/game_tooltip_pin.h"
 #include "codex_fields.h"
 
 #include "Engine_classes.hpp"
@@ -101,6 +102,7 @@ extern "C" {
 		// Recipe database + search/detail UI
 		CodexRecipes::Init(self);
 		CodexUI::Init(self);
+		CodexTooltipPin::Init(self);
 
 		if (self->hooks->Engine)
 			self->hooks->Engine->RegisterOnTick(&OnEngineTick);
@@ -127,6 +129,7 @@ extern "C" {
 		if (g_self && g_self->hooks->World)
 			g_self->hooks->World->UnregisterOnExperienceLoadComplete(&OnExperienceLoadComplete);
 
+		CodexTooltipPin::Shutdown(g_self);
 		CodexUI::Shutdown(g_self);
 		CodexRecipes::Shutdown();
 		CodexIcons::Shutdown();
