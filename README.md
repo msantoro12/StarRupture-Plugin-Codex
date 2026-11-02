@@ -23,6 +23,10 @@ what it produces.
   Tier 1 / Tier 2 tab for each tier. Click a recipe to open it, right-click to pin it.
 - **Pinned recipes** -- pin up to 8 recipes to keep them on screen while you play. Pinned
   windows never block game input; open the Codex (`N`) to drag them around or unpin them.
+  Right-click an item anywhere the Codex shows one (search results, a recipe's inputs and
+  output, the "used in" list) to pin the recipe that makes it. In a pinned window,
+  right-click an ingredient to pin its recipe too, so a production chain can be pinned
+  step by step. A recipe that is already pinned is not added twice.
 - **Configurable** -- enable/disable the plugin and rebind the search key from the mod
   loader's config file.
 
