@@ -51,8 +51,8 @@ loader the plugin shows "Needs loader" and stays off.
 - **Right-click to pin** -- right-click an item anywhere the Codex shows one (search results, a
   recipe's inputs and output, the "used in" list) to pin the recipe that makes it. In a pinned
   window, right-click an ingredient to pin its recipe too, so a production chain can be pinned
-  step by step. It works wherever pins can be edited: with the Codex, the mod loader menu or the
-  Escape menu open. A recipe that is already pinned is not added twice; items nothing makes
+  step by step. It works wherever pins can be edited: with the Codex, the mod loader overlay (`F2`) or the
+  Escape menu open. An item whose recipe is already pinned is not added twice; items nothing makes
   (raw resources) do nothing.
 - **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
   Open) have a button that opens a production planner for the recipe's output in
