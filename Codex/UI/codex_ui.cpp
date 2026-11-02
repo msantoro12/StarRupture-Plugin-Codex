@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,8 +37,9 @@ namespace CodexUI
 		PluginWidgetDesc  g_searchDesc{};
 		PluginPanelDesc   g_detailDesc{};
 
-		// Invisible one-frame widget that performs the detail panel's close -
-		// see RequestCloseDetail.
+		// Invisible one-frame widget that runs render-thread work handed over
+		// from elsewhere: the detail panel's close, the saved pins' restore and
+		// a pin asked for from a game menu - see RenderCloserWidget.
 		WidgetHandle      g_closerWidget = nullptr;
 		PluginWindowHints g_closerHints{};
 		PluginWidgetDesc  g_closerDesc{};
@@ -48,6 +50,13 @@ namespace CodexUI
 		// the closer widget, so the pins are made on the render thread.
 		std::atomic<bool> g_restoreWaiting{ false };
 		std::atomic<bool> g_restoreRender{ false };
+
+		// Work handed to the closer widget, which runs it on the render thread:
+		// closing the detail panel (CloseDetail) and the item a game menu asked
+		// to pin (PinProductOf), which any thread may set.
+		std::atomic<bool> g_closeRender{ false };
+		std::mutex        g_gamePinMutex;
+		std::string       g_gamePinItem;
 
 		// The saved pin set as last read or written, one key per slot, kept so
 		// Clear on the config page, which empties the values, can put them back
@@ -145,6 +154,7 @@ namespace CodexUI
 		void ArrangePins(IModLoaderImGui* imgui);
 		bool IsPinned(void* nativeRecipe);
 		bool IsProductPinned(const std::string& uniqueItemName);
+		void PinItemProducer(IModLoaderImGui* imgui, const std::string& uniqueItemName);
 		bool HasFreePinSlot();
 		bool AnyPinned();
 		int  PinCount();
@@ -312,7 +322,10 @@ namespace CodexUI
 				return;
 
 			if (g_self && g_self->hooks->UI && g_closerWidget)
+			{
+				g_closeRender = true;
 				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, true);
+			}
 			else
 				CloseDetailNow();
 		}
@@ -323,7 +336,17 @@ namespace CodexUI
 				g_self->hooks->UI->SetWidgetVisible(g_closerWidget, false);
 			if (g_restoreRender.exchange(false))
 				RestorePinnedRecipes(imgui);
-			CloseDetailNow();
+
+			std::string gamePin;
+			{
+				std::lock_guard<std::mutex> lock(g_gamePinMutex);
+				gamePin.swap(g_gamePinItem);
+			}
+			if (!gamePin.empty())
+				PinItemProducer(imgui, gamePin);
+
+			if (g_closeRender.exchange(false))
+				CloseDetailNow();
 		}
 
 		// Fired by the host whenever the panel closes, whether from our own
@@ -414,14 +437,10 @@ namespace CodexUI
 			if (!imgui->IsItemClicked(1))
 				return;
 
-			if (!recipe)
-			{
-				CodexRecipes::RecipeInfo producer;
-				if (IsProductPinned(uniqueItemName) || !CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
-					return;
-				recipe = producer.nativeRecipe;
-			}
-			PinRecipe(imgui, recipe);
+			if (recipe)
+				PinRecipe(imgui, recipe);
+			else
+				PinItemProducer(imgui, uniqueItemName);
 		}
 
 		// Icon (if loaded) + name, as one line. Shared by every recipe list.
@@ -1617,6 +1636,16 @@ namespace CodexUI
 			return false;
 		}
 
+		// Pins the recipe that makes the item, unless nothing makes it (a raw
+		// resource) or a pin already does.
+		void PinItemProducer(IModLoaderImGui* imgui, const std::string& uniqueItemName)
+		{
+			CodexRecipes::RecipeInfo producer;
+			if (IsProductPinned(uniqueItemName) || !CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
+				return;
+			PinRecipe(imgui, producer.nativeRecipe);
+		}
+
 		bool HasFreePinSlot()
 		{
 			for (const PinSlot& slot : g_pins)
@@ -2697,7 +2726,8 @@ namespace CodexUI
 		self->hooks->UI->RegisterOnPanelWindowClosed(&OnDetailPanelClosed);
 
 		// Zero-size, input-less and backgroundless: it exists for one frame
-		// only to run CloseDetailNow outside the panel render loop.
+		// only, to run the work handed to it (RenderCloserWidget) outside the
+		// panel render loop.
 		g_closerHints.width   = 1.0f;
 		g_closerHints.height  = 1.0f;
 		g_closerHints.pos_x   = 0.0f;
@@ -2751,10 +2781,27 @@ namespace CodexUI
 			g_self->hooks->UI->SetWidgetVisible(g_closerWidget, true);
 	}
 
+	void PinProductOf(const std::string& uniqueItemName)
+	{
+		if (!g_self || !g_self->hooks->UI || !g_closerWidget || uniqueItemName.empty())
+			return;
+
+		{
+			std::lock_guard<std::mutex> lock(g_gamePinMutex);
+			g_gamePinItem = uniqueItemName;
+		}
+		g_self->hooks->UI->SetWidgetVisible(g_closerWidget, true);
+	}
+
 	void Shutdown(IPluginSelf* self)
 	{
 		g_restoreWaiting = false;
 		g_restoreRender = false;
+		g_closeRender = false;
+		{
+			std::lock_guard<std::mutex> lock(g_gamePinMutex);
+			g_gamePinItem.clear();
+		}
 
 		if (!self->hooks->UI)
 		{

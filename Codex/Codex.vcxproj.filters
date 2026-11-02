@@ -83,6 +83,9 @@
     <ClInclude Include="UI\codex_ui.h">
       <Filter>UI</Filter>
     </ClInclude>
+    <ClInclude Include="UI\game_tooltip_pin.h">
+      <Filter>UI</Filter>
+    </ClInclude>
 
     <!-- SDK (header resolved via $(PluginSDKInclude) in Shared.props) -->
     <ClInclude Include="$(PluginSDKInclude)\plugin_interface.h">
@@ -128,6 +131,9 @@
     <ClCompile Include="UI\codex_ui.cpp">
       <Filter>UI</Filter>
     </ClCompile>
+    <ClCompile Include="UI\game_tooltip_pin.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
 
     <!-- SDK source files (hidden, auto-included via props) -->
     <ClCompile Include="$(StarRuptureSDKSourceDir)Basic.cpp">
@@ -140,6 +146,9 @@
       <Filter>SDK</Filter>
     </ClCompile>
     <ClCompile Include="$(StarRuptureSDKSourceDir)AuCrafting_functions.cpp">
+      <Filter>SDK</Filter>
+    </ClCompile>
+    <ClCompile Include="$(StarRuptureSDKSourceDir)UMG_functions.cpp">
       <Filter>SDK</Filter>
     </ClCompile>
 

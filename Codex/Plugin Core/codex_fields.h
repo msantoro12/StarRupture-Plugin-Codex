@@ -8,6 +8,7 @@
 #include "AuItems_classes.hpp"
 #include "AuItems_structs.hpp"
 #include "AuActorPlacement_classes.hpp"
+#include "UMG_classes.hpp"
 #include "plugin_map.h"
 
 #include <string>
@@ -49,6 +50,14 @@ namespace CodexFields
 	inline auto EntityTypeSize        = SR_SIZE_CHECK(FAuAPMassSpawnedEntityType);
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
+
+	// The game's item tooltip, read when the game-menu pin key is pressed. Found
+	// by name on first use (Blueprint members have no SDK offset to compile in);
+	// a miss leaves that one key doing nothing and the rest of the codex on.
+	inline PluginLazyField<SDK::UUserWidget*> TooltipInfoWidget{ "ItemInfoWidget" }; // WBP_ToolTipWidget_C: the header line
+	inline PluginLazyField<SDK::UTextBlock*>  TooltipItemName{ "ItemName" };         // WBP_HeaderLine_C: the item's name
+	inline PluginLazyField<SDK::UImage*>      TooltipIcon{ "Icon" };                 // Cr_UW_InventoryToolTip: the item's icon
+	inline PluginLazyField<SDK::FSlateBrush>  ImageBrush{ "Brush" };                 // UImage
 
 	// The SDK's helpers, under the names the plugin uses.
 	using PluginMap::KeysOf;

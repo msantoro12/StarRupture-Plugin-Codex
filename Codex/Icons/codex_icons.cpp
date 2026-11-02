@@ -427,4 +427,10 @@ namespace CodexIcons
 		auto it = g_icons.find(uniqueItemName);
 		return it != g_icons.end() ? it->second.handle : nullptr;
 	}
+
+	const void* GetIconTexture(const std::string& uniqueItemName)
+	{
+		auto it = g_icons.find(uniqueItemName);
+		return it != g_icons.end() ? it->second.icon : nullptr;
+	}
 }
