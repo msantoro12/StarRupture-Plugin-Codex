@@ -403,6 +403,25 @@ namespace CodexUI
 			return (std::max)(iconSize, textHeight) + 4.0f;
 		}
 
+		// Right-click on the item just drawn pins a recipe: `recipe` when the item
+		// is that recipe's own product, otherwise the one that makes the item.
+		// Items nothing makes (raw resources) do nothing, and PinRecipe already
+		// skips a recipe that is pinned and a full set of pins.
+		void PinOnRightClick(IModLoaderImGui* imgui, const std::string& uniqueItemName, void* recipe = nullptr)
+		{
+			if (!imgui->IsItemClicked(1))
+				return;
+
+			if (!recipe)
+			{
+				CodexRecipes::RecipeInfo producer;
+				if (!CodexRecipes::FindProducerOfItem(uniqueItemName, producer))
+					return;
+				recipe = producer.nativeRecipe;
+			}
+			PinRecipe(imgui, recipe);
+		}
+
 		// Icon (if loaded) + name, as one line. Shared by every recipe list.
 		void RenderRecipeLabel(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
 			const CodexRecipes::RecipeInfo& recipe, float iconSize)
@@ -432,6 +451,7 @@ namespace CodexUI
 			PluginTextureHandle icon = CodexIcons::GetIcon(item.uniqueItemName);
 
 			bool clicked = imgui->SelectableFull("##item_row", false, kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, iconSize));
+			PinOnRightClick(imgui, item.uniqueItemName, isOutput ? g_selectedNativeRecipe : nullptr);
 			imgui->SameLine(0.0f, 0.0f);
 
 			if (icon && textures)
@@ -507,6 +527,7 @@ namespace CodexUI
 				{
 					PushIDPtr(imgui, consumer.nativeRecipe);
 					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, 22.0f);
+					PinOnRightClick(imgui, consumer.output.uniqueItemName, consumer.nativeRecipe);
 					imgui->SameLine(0.0f, 0.0f);
 					RenderRecipeLabel(imgui, textures, consumer, 18.0f);
 					if (consumer.hasTierVariants)
@@ -857,6 +878,7 @@ namespace CodexUI
 			{
 				PushIDPtr(imgui, recipe->nativeRecipe);
 				bool clicked = imgui->SelectableFull("##recipe_row", row == g_searchHighlight, kSelectableFlags, 0.0f, 22.0f);
+				PinOnRightClick(imgui, recipe->output.uniqueItemName, recipe->nativeRecipe);
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
 				RenderRecipeLabel(imgui, textures, *recipe, 18.0f);
@@ -947,7 +969,7 @@ namespace CodexUI
 			if (!pinned && !canPin)
 				imgui->SetItemTooltip("All pin slots are in use - unpin a recipe first.");
 			else if (!pinned)
-				imgui->SetItemTooltip("Keep this recipe on screen while you play.");
+				imgui->SetItemTooltip("Keep this recipe on screen while you play. Right-click an item to pin its recipe.");
 
 			imgui->SameLine(0.0f, -1.0f);
 			RenderLaunchPlannerButton(imgui, info);
@@ -2517,6 +2539,9 @@ namespace CodexUI
 
 			for (const CodexRecipes::RecipeItemRef& input : info.inputs)
 			{
+				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
+				// (The pin's own product is already pinned, so it has no hook.)
+				imgui->BeginGroup();
 				PluginTextureHandle icon = CodexIcons::GetIcon(input.uniqueItemName);
 				if (icon && textures)
 				{
@@ -2532,6 +2557,9 @@ namespace CodexUI
 					snprintf(line, sizeof(line), "%dx %s", input.count, input.displayName.c_str());
 				imgui->AlignTextToFramePadding();
 				imgui->Text(line);
+				imgui->EndGroup();
+				if (interactive)
+					PinOnRightClick(imgui, input.uniqueItemName);
 			}
 
 			imgui->Separator();

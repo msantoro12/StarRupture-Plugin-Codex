@@ -48,6 +48,12 @@ loader the plugin shows "Needs loader" and stays off.
   plugin brings them back too). They are saved once for the game, not per save, because recipes are game-wide. A
   saved pin whose recipe the game no longer has is dropped, with a line in the log. Clicking a pin raises that window; unpinning a pin lets the others
   take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging any pin then moves the group only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the X at the right end of a pin's title bar (shown while the Codex or the Escape menu is open) to unpin it.
+- **Right-click to pin** -- right-click an item anywhere the Codex shows one (search results, a
+  recipe's inputs and output, the "used in" list) to pin the recipe that makes it. In a pinned
+  window, right-click an ingredient to pin its recipe too, so a production chain can be pinned
+  step by step. It works wherever pins can be edited: with the Codex, the mod loader menu or the
+  Escape menu open. A recipe that is already pinned is not added twice; items nothing makes
+  (raw resources) do nothing.
 - **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
