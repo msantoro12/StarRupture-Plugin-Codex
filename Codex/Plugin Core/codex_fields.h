@@ -59,13 +59,10 @@ namespace CodexFields
 	inline PluginLazyField<SDK::UTextBlock*>  TooltipItemName{ "ItemName" };         // WBP_HeaderLine_C: the item's name
 	inline PluginLazyField<SDK::UImage*>      TooltipIcon{ "Icon" };                 // Cr_UW_InventoryToolTip: the item's icon
 	inline PluginLazyField<SDK::FSlateBrush>  ImageBrush{ "Brush" };                 // UImage
-	inline PluginLazyField<bool>              InventoryActive{ "bIsActive" };        // CommonActivatableWidget: false once the screen is closed
-	inline PluginLazyField<SDK::AActor*>      InventoryUsedActor{ "InteractedActor" }; // CrUW_InventoryScreen: the machine in use, null for the player's own inventory
+	inline PluginLazyField<SDK::UMenuAnchor*> SlotTooltipAnchor{ "TooltipAnchor" };  // CrUW_InventorySlot, CrUW_WeaponSlot: opens the item tooltip
 
-	// The hint row: the tooltip's action prompt and the game's action button.
-	inline PluginLazyField<SDK::UUserWidget*> TooltipPrompt{ "TooltipPrompt" };         // WBP_ToolTipWidget_C: the action prompt
-	inline PluginLazyField<SDK::UWidget*>     TooltipActionsOverlay{ "ActionsOverlay" }; // WBP_ToolTipWidget_C: holds the prompt
-	inline PluginLazyField<SDK::UVerticalBox*> PromptActionsBox{ "ActionsBox" };        // WBP_TooltipPrompt_C: the list of action buttons
+	// The hint row: the tooltip's text list and the game's action button.
+	inline PluginLazyField<SDK::USizeBox*>    TooltipCraftedIn{ "CraftedInSizeBox" };   // WBP_ToolTipWidget_C: the "Crafted in" line
 	inline PluginLazyField<SDK::UTextBlock*>  ButtonActionName{ "ActionName" };         // CrUW_ActionButton: the label
 	inline PluginLazyField<SDK::UImage*>      ButtonActionIcon{ "ActionIcon" };         // CrUW_ActionButton: the key icon
 	inline PluginLazyField<SDK::USizeBox*>    ButtonIconSizeBox{ "ActionIconSizeBox" }; // CrUW_ActionButton: holds the key icon

@@ -13,18 +13,13 @@
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 namespace CodexTooltipPin
 {
 	namespace
 	{
-		// The anchor every game widget with an item tooltip opens it from.
-		constexpr const char* kTooltipAnchorName = "TooltipAnchor";
-
 		bool EqualsNoCase(const std::string& a, const std::string& b)
 		{
 			return a.size() == b.size() && std::equal(a.begin(), a.end(), b.begin(),
@@ -90,115 +85,96 @@ namespace CodexTooltipPin
 			return picked.size() == 1 ? picked.front() : std::string();
 		}
 
-		// What one pass over GObjects found. The pointers are good for the tick
+
+		// What one look at the screen found. The pointers are good for the tick
 		// that made it and no longer.
 		struct Observation
 		{
-			std::vector<SDK::UUserWidget*> shown; // item tooltips that are on screen
-			bool anchorOpen = false;              // a TooltipAnchor is open
-			bool screenUp = false;                // an inventory screen is visible and active
-			bool machineInUse = false;            // ...and it has a machine open
-			bool playerInventoryOpen = false;     // right-click is the game's own action
+			std::vector<SDK::UUserWidget*> all;   // every item tooltip the engine lists as alive
+			std::vector<SDK::UUserWidget*> shown; // those on screen
 		};
 
-		enum class Kind : uint8_t { Other, Anchor, Screen, Tooltip };
-
-		// One pass over GObjects. A class's kind is worked out once, from its
-		// first object, so each further object costs one lookup and no IsA walk.
-		// A tooltip widget on screen is one whose Slate widget is alive: a closed
-		// menu's tooltip has lost it, and IsVisible is false for it.
-		Observation Observe(IPluginObjectProperties* properties)
+		// Every widget of a class (or below it) that the engine's own widget search
+		// lists. That search leaves out objects the garbage collector has marked
+		// unreachable, and the engine asserts, fatally, on a call to one (ProcessEvent
+		// "marked unreachable"). A closed tooltip is exactly that: nothing holds it
+		// once its popup is gone. So no widget is called through a pointer that did
+		// not come out of this function in the same tick, and what is remembered
+		// across ticks is only an ObjectRef, compared and never called.
+		std::vector<SDK::UUserWidget*> LiveWidgets(SDK::UClass* widgetClass)
 		{
-			Observation seen;
-			SDK::UClass* tooltipClass = SDK::UCr_UW_InventoryToolTip::StaticClass();
-			SDK::UClass* anchorClass = SDK::UMenuAnchor::StaticClass();
-			SDK::UClass* screenClass = SDK::UCrUW_InventoryScreen::StaticClass();
-			if (!properties || !tooltipClass || !anchorClass || !screenClass)
-				return seen;
+			std::vector<SDK::UUserWidget*> live;
+			SDK::UWorld* world = PluginSdkRuntime::GetWorld();
+			if (!world || !widgetClass)
+				return live;
 
-			constexpr auto kSkipFlags =
-				static_cast<uint32_t>(SDK::EObjectFlags::ClassDefaultObject) |
-				static_cast<uint32_t>(SDK::EObjectFlags::ArchetypeObject) |
+			constexpr uint32_t kDeadFlags =
 				static_cast<uint32_t>(SDK::EObjectFlags::BeginDestroyed) |
 				static_cast<uint32_t>(SDK::EObjectFlags::FinishDestroyed) |
 				static_cast<uint32_t>(SDK::EObjectFlags::MirroredGarbage);
 
-			static std::unordered_map<const SDK::UClass*, Kind> kinds;
+			SDK::TArray<SDK::UUserWidget*> found;
+			SDK::UWidgetBlueprintLibrary::GetAllWidgetsOfClass(world, &found, widgetClass, false);
+			SDK::UUserWidget* const* data = found.GetDataPtr();
+			for (int i = 0; i < found.Num(); ++i)
+				if (data[i] && !(static_cast<uint32_t>(data[i]->Flags) & kDeadFlags))
+					live.push_back(data[i]);
+			return live;
+		}
 
-			const int count = SDK::UObject::GObjects->Num();
-			for (int i = 0; i < count; ++i)
-			{
-				SDK::UObject* obj = SDK::UObject::GObjects->GetByIndex(i);
-				if (!obj || (static_cast<uint32_t>(obj->Flags) & kSkipFlags) || !obj->Class)
-					continue;
+		bool Lists(const std::vector<SDK::UUserWidget*>& live, const ObjectRef<SDK::UUserWidget>& ref)
+		{
+			return std::any_of(live.begin(), live.end(), [&](SDK::UUserWidget* w) { return ObjectRef<SDK::UUserWidget>(w) == ref; });
+		}
 
-				auto known = kinds.find(obj->Class);
-				if (known == kinds.end())
-				{
-					Kind kind = Kind::Other;
-					if (obj->IsA(anchorClass))
-						kind = Kind::Anchor;
-					else if (obj->IsA(screenClass))
-						kind = Kind::Screen;
-					else if (obj->IsA(tooltipClass))
-						kind = Kind::Tooltip;
-					known = kinds.emplace(obj->Class, kind).first;
-				}
-
-				switch (known->second)
-				{
-				case Kind::Anchor:
-					if (!seen.anchorOpen && obj->GetName() == kTooltipAnchorName &&
-						static_cast<SDK::UMenuAnchor*>(obj)->IsOpen())
-						seen.anchorOpen = true;
-					break;
-				case Kind::Screen:
-				{
-					// The inventory screen also hosts machine menus, which set
-					// the actor being used; the player's own inventory has none.
-					auto* screen = static_cast<SDK::UUserWidget*>(obj);
-					bool* active = CodexFields::InventoryActive.In(properties, screen);
-					SDK::AActor** used = CodexFields::InventoryUsedActor.In(properties, screen);
-					if (screen->IsVisible() && (!active || *active) && used)
-					{
-						seen.screenUp = true;
-						seen.machineInUse = *used != nullptr;
-						seen.playerInventoryOpen = !seen.machineInUse;
-					}
-					break;
-				}
-				case Kind::Tooltip:
-				{
-					auto* tooltip = static_cast<SDK::UUserWidget*>(obj);
-					if (tooltip->IsVisible())
-						seen.shown.push_back(tooltip);
-					break;
-				}
-				default:
-					break;
-				}
-			}
+		// The item tooltips alive now, and which of them are on screen (the Slate
+		// widget of a tooltip whose popup closed is gone, and IsVisible is false).
+		Observation Observe()
+		{
+			Observation seen;
+			seen.all = LiveWidgets(SDK::UCr_UW_InventoryToolTip::StaticClass());
+			for (SDK::UUserWidget* tooltip : seen.all)
+				if (tooltip->IsVisible())
+					seen.shown.push_back(tooltip);
 			return seen;
 		}
 
+		// The class of the inventory slot whose tooltip is open, or empty when
+		// none is. Right-click is the game's own action on an inventory slot, and
+		// the Codex's pin and its hint stay off those tooltips; a recipe list or a
+		// machine's crafting entries are not slots of these classes. Only the open
+		// popup counts, so this reads the slots' own TooltipAnchor, not the screen.
+		std::string OpenInventorySlot(IPluginObjectProperties* properties)
+		{
+			for (SDK::UClass* slotClass : { SDK::UCrUW_InventorySlot::StaticClass(), SDK::UCrUW_WeaponSlot::StaticClass() })
+			{
+				for (SDK::UUserWidget* slot : LiveWidgets(slotClass))
+				{
+					SDK::UMenuAnchor** anchor = CodexFields::SlotTooltipAnchor.In(properties, slot);
+					if (anchor && *anchor && (*anchor)->IsOpen())
+						return slot->Class ? slot->Class->GetName() : std::string("inventory slot");
+				}
+			}
+			return {};
+		}
+
 		// The item the pin would act on given what is open, or empty when it
-		// would do nothing: no tooltip open, what it shows is not something a
-		// recipe makes, or the player's own inventory is open. Right-click is the
-		// game's own action on inventory slots.
+		// would do nothing: no tooltip open, it belongs to an inventory slot, or
+		// what it shows is not something a recipe makes.
 		std::string PinTarget(IPluginObjectProperties* properties, const Observation& seen, bool log)
 		{
-			if (seen.playerInventoryOpen)
+			if (seen.shown.empty())
 			{
 				if (log)
-					LOG_DEBUG("CodexTooltipPin: the player's inventory is open; nothing pinned.");
+					LOG_DEBUG("CodexTooltipPin: no item tooltip is open.");
 				return {};
 			}
 
-			if (!seen.anchorOpen || seen.shown.empty())
+			const std::string slot = OpenInventorySlot(properties);
+			if (!slot.empty())
 			{
 				if (log)
-					LOG_DEBUG("CodexTooltipPin: no item tooltip is open (anchor open: %d, tooltips shown: %d).",
-						seen.anchorOpen ? 1 : 0, static_cast<int>(seen.shown.size()));
+					LOG_INFO("CodexTooltipPin: the tooltip is an inventory slot's ('%s'), where right-click is the game's own; nothing pinned.", slot.c_str());
 				return {};
 			}
 
@@ -224,8 +200,7 @@ namespace CodexTooltipPin
 			return found;
 		}
 
-		// The item in the game's open item tooltip, or empty. One pass over
-		// GObjects per press, nothing kept: the tooltip only lives while open.
+		// The item in the game's open item tooltip, or empty.
 		std::string ReadOpenTooltipItem()
 		{
 			IPluginHooks* hooks = GetHooks();
@@ -233,52 +208,41 @@ namespace CodexTooltipPin
 			if (!properties)
 				return {};
 
-			const Observation seen = Observe(properties);
-			if (seen.screenUp)
-				LOG_INFO("CodexTooltipPin: the inventory screen is up (machine in use: %d).", seen.machineInUse ? 1 : 0);
-			return PinTarget(properties, seen, true);
+			return PinTarget(properties, Observe(), true);
 		}
 
-		// ---- The hint: a "Pin to Codex" row in the tooltip's own action list ----
+		// ---- The hint: a "Pin to Codex" row in the tooltip's body ----
 		//
-		// The tooltip (WBP_ToolTipWidget_C) holds a WBP_TooltipPrompt_C whose
-		// ActionsBox is the vertical list of the game's WBP_ActionButton_C hints.
-		// The row is one more of those, with the key's icon from the game's own
-		// keyboard-and-mouse input data. It is added once per tooltip, follows what
-		// the tooltip shows, and is taken out again on unload.
+		// The tooltip (WBP_ToolTipWidget_C) lays its text out in a vertical list
+		// that holds the header, the description and "Crafted in". The row is the
+		// game's own WBP_ActionButton_C, appended to that list, so it sits at the
+		// foot of the text with the list's own spacing and the tooltip grows to
+		// hold it. The game's action prompt, which hangs below the tooltip and
+		// has its own native rows, is left as it is. The key's icon comes from the
+		// game's keyboard-and-mouse input data. One row per tooltip, taken out
+		// again on unload.
 
 		constexpr float kWatchSeconds = 0.25f; // between looks for a new tooltip
-		constexpr float kIdleSeconds = 1.0f;   // after one that shows nothing pinnable
 
 		struct HintRow
 		{
-			ObjectRef<SDK::UUserWidget> tooltip;
+			ObjectRef<SDK::UUserWidget> tooltip; // compared, never called
 			ObjectRef<SDK::UUserWidget> row;
-			ObjectRef<SDK::UUserWidget> prompt;
-			ObjectRef<SDK::UWidget> overlay;
-			SDK::ESlateVisibility promptWas = SDK::ESlateVisibility::Visible;
-			SDK::ESlateVisibility overlayWas = SDK::ESlateVisibility::Visible;
-			bool restorePrompt = false;
-			bool restoreOverlay = false;
 		};
 
 		std::vector<HintRow> g_rows;
 		float g_sinceLook = 0.0f;
-		float g_lookEvery = kWatchSeconds;
 		int g_problemLogs = 0;
+		int g_rowLogs = 0;
+		int g_slotLogs = 0;
 		bool g_cursorLogged = false;
 
-		void HintProblem(const char* what)
+		void HintProblem(const std::string& what)
 		{
 			if (g_problemLogs++ < 5)
-				LOG_INFO("CodexTooltipHint: no row added: %s.", what);
+				LOG_INFO("CodexTooltipHint: no row added: %s.", what.c_str());
 			else
-				LOG_DEBUG("CodexTooltipHint: no row added: %s.", what);
-		}
-
-		bool IsHidden(SDK::ESlateVisibility v)
-		{
-			return v == SDK::ESlateVisibility::Collapsed || v == SDK::ESlateVisibility::Hidden;
+				LOG_DEBUG("CodexTooltipHint: no row added: %s.", what.c_str());
 		}
 
 		// The pin key as the row names it: its game key when it is a single key,
@@ -321,36 +285,70 @@ namespace CodexTooltipPin
 		}
 
 		// The game's brush for a key, from the keyboard-and-mouse input data the
-		// Common UI action widgets read their key icons from. Null when the game
-		// has none for it.
-		const SDK::FSlateBrush* GameKeyBrush(const std::string& gameKey)
+		// Common UI action widgets read their key icons from: the per-key list
+		// first, then the lists of keys that share a brush, the order Common UI
+		// itself looks them up in. Null when the game has none for it, and why.
+		const SDK::FSlateBrush* GameKeyBrush(const std::string& gameKey, std::string& why)
 		{
 			if (gameKey.empty())
+			{
+				why = "the binding is more than one key";
 				return nullptr;
+			}
 			SDK::UBP_CommonInput_KeyboardMouse_C* data = SDK::UBP_CommonInput_KeyboardMouse_C::GetDefaultObj();
 			if (!data)
+			{
+				why = "the keyboard-and-mouse input data is not loaded";
 				return nullptr;
+			}
 			for (int i = 0; i < data->InputBrushDataMap.Num(); ++i)
 			{
 				const SDK::FCommonInputKeyBrushConfiguration& entry = data->InputBrushDataMap[i];
 				if (EqualsNoCase(entry.Key.KeyName.ToString(), gameKey))
 					return &entry.KeyBrush;
 			}
+			for (int i = 0; i < data->InputBrushKeySets.Num(); ++i)
+			{
+				const SDK::FCommonInputKeySetBrushConfiguration& set = data->InputBrushKeySets[i];
+				for (int k = 0; k < set.Keys.Num(); ++k)
+					if (EqualsNoCase(set.Keys[k].KeyName.ToString(), gameKey))
+						return &set.KeyBrush;
+			}
+			why = "the input data lists no brush for '" + gameKey + "' (" +
+				std::to_string(data->InputBrushDataMap.Num()) + " single keys, " +
+				std::to_string(data->InputBrushKeySets.Num()) + " key sets)";
 			return nullptr;
 		}
 
-		// Adds the row to one tooltip; null on success, else why it could not.
-		const char* AddRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, HintRow& entry)
+		// The vertical list the tooltip's text is laid out in: the parent of its
+		// header line, else of its "Crafted in" box. Null when neither is one.
+		SDK::UPanelWidget* TooltipBody(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, std::string& seen)
 		{
-			SDK::UUserWidget** promptSlot = CodexFields::TooltipPrompt.In(properties, tooltip);
-			SDK::UUserWidget* prompt = promptSlot ? *promptSlot : nullptr;
-			if (!prompt)
-				return "the tooltip has no action prompt";
+			SDK::UWidget* anchors[2] = {};
+			SDK::UUserWidget** header = CodexFields::TooltipInfoWidget.In(properties, tooltip);
+			anchors[0] = header ? *header : nullptr;
+			SDK::USizeBox** crafted = CodexFields::TooltipCraftedIn.In(properties, tooltip);
+			anchors[1] = crafted ? *crafted : nullptr;
 
-			SDK::UVerticalBox** boxSlot = CodexFields::PromptActionsBox.In(properties, prompt);
-			SDK::UVerticalBox* box = boxSlot ? *boxSlot : nullptr;
-			if (!box)
-				return "the action prompt has no actions list";
+			for (SDK::UWidget* anchor : anchors)
+			{
+				SDK::UPanelWidget* parent = anchor ? anchor->GetParent() : nullptr;
+				if (!parent)
+					continue;
+				if (parent->IsA(SDK::UVerticalBox::StaticClass()))
+					return parent;
+				seen += (seen.empty() ? "" : ", ") + (parent->Class ? parent->Class->GetName() : std::string("?"));
+			}
+			return nullptr;
+		}
+
+		// Adds the row to one tooltip; empty on success, else why it could not.
+		std::string AddRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, HintRow& entry)
+		{
+			std::string parents;
+			SDK::UPanelWidget* body = TooltipBody(properties, tooltip, parents);
+			if (!body)
+				return "the tooltip's text is not in a vertical list (found: " + (parents.empty() ? std::string("nothing") : parents) + ")";
 
 			SDK::UClass* buttonClass = SDK::UWBP_ActionButton_C::StaticClass();
 			if (!buttonClass)
@@ -368,15 +366,18 @@ namespace CodexTooltipPin
 			// Attached first: the game's own construct code runs on attach and
 			// would otherwise overwrite what is set below.
 			row->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-			box->AddChild(row);
+			body->AddChild(row);
 			entry.row.Set(row);
 
 			// The key's own icon where the pin key is one key the game has an icon
 			// for; otherwise the label names the binding.
 			const KeyLabel key = LabelOfPinKey();
-			const SDK::FSlateBrush* brush = GameKeyBrush(key.gameKey);
+			std::string why;
+			const SDK::FSlateBrush* brush = GameKeyBrush(key.gameKey, why);
 			SDK::UImage** iconSlot = CodexFields::ButtonActionIcon.In(properties, row);
 			SDK::UImage* icon = iconSlot ? *iconSlot : nullptr;
+			if (brush && !icon)
+				why = "the action button has no icon image";
 			const bool withIcon = brush && icon;
 
 			std::string label = "Pin to Codex";
@@ -397,32 +398,15 @@ namespace CodexTooltipPin
 					(*inputSlot)->SetVisibility(SDK::ESlateVisibility::Collapsed);
 			}
 
-			// A tooltip with nothing else to do keeps its prompt hidden.
-			entry.prompt.Set(prompt);
-			entry.promptWas = prompt->GetVisibility();
-			if (IsHidden(entry.promptWas))
-			{
-				entry.restorePrompt = true;
-				prompt->SetVisibility(SDK::ESlateVisibility::SelfHitTestInvisible);
-			}
-			SDK::UWidget** overlaySlot = CodexFields::TooltipActionsOverlay.In(properties, tooltip);
-			if (overlaySlot && *overlaySlot)
-			{
-				SDK::UWidget* overlay = *overlaySlot;
-				entry.overlay.Set(overlay);
-				entry.overlayWas = overlay->GetVisibility();
-				if (IsHidden(entry.overlayWas))
-				{
-					entry.restoreOverlay = true;
-					overlay->SetVisibility(SDK::ESlateVisibility::SelfHitTestInvisible);
-				}
-			}
-
-			LOG_INFO("CodexTooltipHint: row added (key '%s', %s, prompt was %d, overlay was %d).",
-				key.spelled.c_str(),
-				withIcon ? "game icon" : "no game icon for it, so the label names the key",
-				static_cast<int>(entry.promptWas), static_cast<int>(entry.overlayWas));
-			return nullptr;
+			// The first few rows are logged at INFO for the in-game check, the rest
+			// at DEBUG: one is added per hover.
+			const char* shape = withIcon ? "game icon" : why.c_str();
+			const std::string bodyClass = body->Class ? body->Class->GetName() : std::string("?");
+			if (g_rowLogs++ < 3)
+				LOG_INFO("CodexTooltipHint: row added (key '%s', %s, in a %s).", key.spelled.c_str(), shape, bodyClass.c_str());
+			else
+				LOG_DEBUG("CodexTooltipHint: row added (key '%s', %s).", key.spelled.c_str(), shape);
+			return {};
 		}
 
 		// Whether the player's cursor is up: the only time a tooltip can be open.
@@ -433,33 +417,6 @@ namespace CodexTooltipPin
 			return controller && controller->bShowMouseCursor;
 		}
 
-		// The rows on tooltips already seen follow what their tooltip shows. True
-		// while one of those tooltips is still on screen.
-		bool FollowRows(IPluginObjectProperties* properties)
-		{
-			bool onScreen = false;
-			for (auto it = g_rows.begin(); it != g_rows.end();)
-			{
-				SDK::UUserWidget* tooltip = it->tooltip.Get();
-				if (!tooltip)
-				{
-					it = g_rows.erase(it); // the tooltip is gone and its row with it
-					continue;
-				}
-				if (tooltip->IsVisible())
-				{
-					onScreen = true;
-					if (SDK::UUserWidget* row = it->row.Get())
-					{
-						const bool pinnable = !MatchProduct(TooltipTitle(properties, tooltip), TooltipTexture(properties, tooltip)).empty();
-						row->SetVisibility(pinnable ? SDK::ESlateVisibility::HitTestInvisible : SDK::ESlateVisibility::Collapsed);
-					}
-				}
-				++it;
-			}
-			return onScreen;
-		}
-
 		void WatchTooltips()
 		{
 			IPluginHooks* hooks = GetHooks();
@@ -467,28 +424,27 @@ namespace CodexTooltipPin
 			if (!properties || !CodexRecipes::IsReady())
 				return;
 
-			if (FollowRows(properties))
+			const bool cursorUp = CursorUp();
+			if (!cursorUp && g_rows.empty())
 				return;
-
-			if (!CursorUp())
-				return;
-			if (!g_cursorLogged)
+			if (cursorUp && !g_cursorLogged)
 			{
 				g_cursorLogged = true;
 				LOG_INFO("CodexTooltipHint: the cursor is up; watching for item tooltips.");
 			}
 
-			// The pass over GObjects costs what it costs on this machine, so the
-			// wait before the next one is set from how long this one took: 40 times
-			// that, never under kWatchSeconds nor over kIdleSeconds.
-			const auto started = std::chrono::steady_clock::now();
-			const Observation seen = Observe(properties);
-			const float took = std::chrono::duration<float>(std::chrono::steady_clock::now() - started).count();
-			g_lookEvery = seen.shown.empty() ? std::clamp(took * 40.0f, kWatchSeconds, kIdleSeconds) : kIdleSeconds;
-			if (seen.shown.empty() || PinTarget(properties, seen, false).empty())
-				return;
-			g_lookEvery = kWatchSeconds;
+			const Observation seen = Observe();
 
+			// A row whose tooltip the engine no longer lists is forgotten as it is:
+			// the tooltip may already be marked unreachable, and is never called.
+			g_rows.erase(std::remove_if(g_rows.begin(), g_rows.end(),
+				[&](const HintRow& r) { return !Lists(seen.all, r.tooltip); }), g_rows.end());
+
+			if (!cursorUp)
+				return;
+
+			std::string slot;
+			bool slotRead = false;
 			for (SDK::UUserWidget* tooltip : seen.shown)
 			{
 				const ObjectRef<SDK::UUserWidget> ref(tooltip);
@@ -497,26 +453,37 @@ namespace CodexTooltipPin
 
 				HintRow entry;
 				entry.tooltip = ref;
-				if (const char* why = AddRow(properties, tooltip, entry))
-					HintProblem(why);
-				g_rows.push_back(entry); // kept even when it failed, so this tooltip is not tried again
+				if (!slotRead)
+				{
+					slot = OpenInventorySlot(properties);
+					slotRead = true;
+				}
+
+				if (!slot.empty())
+				{
+					if (g_slotLogs++ < 3)
+						LOG_INFO("CodexTooltipHint: no row on a tooltip of the inventory slot '%s' (the game's own right-click).", slot.c_str());
+				}
+				else if (!MatchProduct(TooltipTitle(properties, tooltip), TooltipTexture(properties, tooltip)).empty())
+				{
+					const std::string why = AddRow(properties, tooltip, entry);
+					if (!why.empty())
+						HintProblem(why);
+				}
+				g_rows.push_back(entry); // kept even without a row, so this tooltip is not looked at again
 			}
 		}
 
-		// Takes the rows out of tooltips that are still alive and gives their
-		// prompts back the visibility they had. Game thread only.
+		// Takes the rows out of the tooltips that are still alive. Game thread only.
 		void RemoveRows()
 		{
+			const Observation seen = Observe();
 			for (HintRow& entry : g_rows)
 			{
+				if (!Lists(seen.all, entry.tooltip))
+					continue;
 				if (SDK::UUserWidget* row = entry.row.Get())
 					row->RemoveFromParent();
-				if (entry.restorePrompt)
-					if (SDK::UUserWidget* prompt = entry.prompt.Get())
-						prompt->SetVisibility(entry.promptWas);
-				if (entry.restoreOverlay)
-					if (SDK::UWidget* overlay = entry.overlay.Get())
-						overlay->SetVisibility(entry.overlayWas);
 			}
 			g_rows.clear();
 		}
@@ -562,7 +529,7 @@ namespace CodexTooltipPin
 	void Tick(float deltaSeconds)
 	{
 		g_sinceLook += deltaSeconds;
-		if (g_sinceLook < g_lookEvery)
+		if (g_sinceLook < kWatchSeconds)
 			return;
 		g_sinceLook = 0.0f;
 
