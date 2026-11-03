@@ -119,6 +119,12 @@ namespace CodexTooltipPin
 			for (int i = 0; i < found.Num(); ++i)
 				if (data[i] && !(static_cast<uint32_t>(data[i]->Flags) & kDeadFlags))
 					live.push_back(data[i]);
+
+			// The engine allocated the array's buffer and the SDK's TArray does not
+			// free it; this runs four times a second, so give it back.
+			IPluginHooks* hooks = GetHooks();
+			if (found.GetDataPtr() && hooks && hooks->Memory && hooks->Memory->Free)
+				hooks->Memory->Free(const_cast<SDK::UUserWidget**>(found.GetDataPtr()));
 			return live;
 		}
 
@@ -161,20 +167,18 @@ namespace CodexTooltipPin
 		// The item the pin would act on given what is open, or empty when it
 		// would do nothing: no tooltip open, it belongs to an inventory slot, or
 		// what it shows is not something a recipe makes.
-		std::string PinTarget(IPluginObjectProperties* properties, const Observation& seen, bool log)
+		std::string PinTarget(IPluginObjectProperties* properties, const Observation& seen)
 		{
 			if (seen.shown.empty())
 			{
-				if (log)
-					LOG_DEBUG("CodexTooltipPin: no item tooltip is open.");
+				LOG_DEBUG("CodexTooltipPin: no item tooltip is open.");
 				return {};
 			}
 
 			const std::string slot = OpenInventorySlot(properties);
 			if (!slot.empty())
 			{
-				if (log)
-					LOG_INFO("CodexTooltipPin: the tooltip is an inventory slot's ('%s'), where right-click is the game's own; nothing pinned.", slot.c_str());
+				LOG_INFO("CodexTooltipPin: the tooltip is an inventory slot's ('%s'), where right-click is the game's own; nothing pinned.", slot.c_str());
 				return {};
 			}
 
@@ -185,14 +189,12 @@ namespace CodexTooltipPin
 				const std::string item = MatchProduct(title, TooltipTexture(properties, tooltip));
 				if (item.empty())
 				{
-					if (log)
-						LOG_INFO("CodexTooltipPin: the tooltip's item '%s' is not one a recipe makes; nothing pinned.", title.c_str());
+					LOG_INFO("CodexTooltipPin: the tooltip's item '%s' is not one a recipe makes; nothing pinned.", title.c_str());
 					continue;
 				}
 				if (!found.empty() && found != item)
 				{
-					if (log)
-						LOG_INFO("CodexTooltipPin: %d item tooltips are up at once; nothing pinned.", static_cast<int>(seen.shown.size()));
+					LOG_INFO("CodexTooltipPin: %d item tooltips are up at once; nothing pinned.", static_cast<int>(seen.shown.size()));
 					return {};
 				}
 				found = item;
@@ -208,7 +210,7 @@ namespace CodexTooltipPin
 			if (!properties)
 				return {};
 
-			return PinTarget(properties, Observe(), true);
+			return PinTarget(properties, Observe());
 		}
 
 		// ---- The hint: a "Pin to Codex" row in the tooltip's body ----
