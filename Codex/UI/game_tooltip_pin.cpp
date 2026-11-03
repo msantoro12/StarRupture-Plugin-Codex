@@ -2,6 +2,7 @@
 #include "codex_ui.h"
 #include "Icons/codex_icons.h"
 #include "Recipes/codex_recipes.h"
+#include "Planner/codex_planner.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
 #include "Plugin Core/codex_fields.h"
@@ -12,6 +13,7 @@
 #include "object_ref.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <string>
 #include <vector>
@@ -164,10 +166,18 @@ namespace CodexTooltipPin
 			return {};
 		}
 
+		// What the pin or the planner key would act on: the product's unique name
+		// and the name the tooltip shows for it. Empty when there is none.
+		struct Target
+		{
+			std::string item;
+			std::string title;
+		};
+
 		// The item the pin would act on given what is open, or empty when it
 		// would do nothing: no tooltip open, it belongs to an inventory slot, or
 		// what it shows is not something a recipe makes.
-		std::string PinTarget(IPluginObjectProperties* properties, const Observation& seen)
+		Target PinTarget(IPluginObjectProperties* properties, const Observation& seen)
 		{
 			if (seen.shown.empty())
 			{
@@ -182,7 +192,7 @@ namespace CodexTooltipPin
 				return {};
 			}
 
-			std::string found;
+			Target found;
 			for (SDK::UUserWidget* tooltip : seen.shown)
 			{
 				const std::string title = TooltipTitle(properties, tooltip);
@@ -192,18 +202,18 @@ namespace CodexTooltipPin
 					LOG_INFO("CodexTooltipPin: the tooltip's item '%s' is not one a recipe makes; nothing pinned.", title.c_str());
 					continue;
 				}
-				if (!found.empty() && found != item)
+				if (!found.item.empty() && found.item != item)
 				{
 					LOG_INFO("CodexTooltipPin: %d item tooltips are up at once; nothing pinned.", static_cast<int>(seen.shown.size()));
 					return {};
 				}
-				found = item;
+				found = { item, title };
 			}
 			return found;
 		}
 
 		// The item in the game's open item tooltip, or empty.
-		std::string ReadOpenTooltipItem()
+		Target ReadOpenTarget()
 		{
 			IPluginHooks* hooks = GetHooks();
 			IPluginObjectProperties* properties = hooks ? hooks->ObjectProperties : nullptr;
@@ -213,7 +223,7 @@ namespace CodexTooltipPin
 			return PinTarget(properties, Observe());
 		}
 
-		// ---- The hint: a "Pin to Codex" row in the tooltip's body ----
+		// ---- The hint: "Pin to Codex" and "Open in Planner" rows in the tooltip's body ----
 		//
 		// The tooltip (WBP_ToolTipWidget_C) lays its text out in a vertical list
 		// that holds the header, the description and "Crafted in". The row is the
@@ -229,7 +239,8 @@ namespace CodexTooltipPin
 		struct HintRow
 		{
 			ObjectRef<SDK::UUserWidget> tooltip; // compared, never called
-			ObjectRef<SDK::UUserWidget> row;
+			ObjectRef<SDK::UUserWidget> row;        // "Pin to Codex"
+			ObjectRef<SDK::UUserWidget> plannerRow; // "Open in Planner"
 		};
 
 		std::vector<HintRow> g_rows;
@@ -238,6 +249,7 @@ namespace CodexTooltipPin
 		int g_rowLogs = 0;
 		int g_slotLogs = 0;
 		bool g_cursorLogged = false;
+		std::atomic<bool> g_cursorUp{ false }; // for the render thread
 
 		void HintProblem(const std::string& what)
 		{
@@ -247,7 +259,7 @@ namespace CodexTooltipPin
 				LOG_DEBUG("CodexTooltipHint: no row added: %s.", what.c_str());
 		}
 
-		// The pin key as the row names it: its game key when it is a single key,
+		// A key binding as a row names it: its game key when it is a single key,
 		// else spelled out ("Alt+Right-click").
 		struct KeyLabel
 		{
@@ -263,9 +275,8 @@ namespace CodexTooltipPin
 			return token;
 		}
 
-		KeyLabel LabelOfPinKey()
+		KeyLabel LabelOf(const std::string& binding)
 		{
-			const std::string binding = CodexConfig::Config::GetGamePinKey();
 			std::vector<std::string> tokens;
 			size_t from = 0;
 			while (from <= binding.size())
@@ -344,14 +355,11 @@ namespace CodexTooltipPin
 			return nullptr;
 		}
 
-		// Adds the row to one tooltip; empty on success, else why it could not.
-		std::string AddRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, HintRow& entry)
+		// Adds one action row to the tooltip's text list, set up like the text
+		// rows around it; empty on success, else why it could not.
+		std::string AddOneRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, SDK::UPanelWidget* body,
+			SDK::UWidget* sibling, const std::string& binding, const char* action, ObjectRef<SDK::UUserWidget>& out)
 		{
-			std::string parents;
-			SDK::UPanelWidget* body = TooltipBody(properties, tooltip, parents);
-			if (!body)
-				return "the tooltip's text is not in a vertical list (found: " + (parents.empty() ? std::string("nothing") : parents) + ")";
-
 			SDK::UClass* buttonClass = SDK::UWBP_ActionButton_C::StaticClass();
 			if (!buttonClass)
 				return "the game's action button class is not loaded";
@@ -368,46 +376,88 @@ namespace CodexTooltipPin
 			// Attached first: the game's own construct code runs on attach and
 			// would otherwise overwrite what is set below.
 			row->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-			body->AddChild(row);
-			entry.row.Set(row);
+			SDK::UPanelSlot* placed = body->AddChild(row);
+			out.Set(row);
 
-			// The key's own icon where the pin key is one key the game has an icon
-			// for; otherwise the label names the binding.
-			const KeyLabel key = LabelOfPinKey();
+			// Laid out as the text rows beside it are: the slot's padding, size and
+			// alignment are the neighbour's own.
+			std::string slotNote = "no neighbouring slot to copy";
+			SDK::UPanelSlot* theirs = sibling ? sibling->Slot : nullptr;
+			if (placed && theirs && placed->IsA(SDK::UVerticalBoxSlot::StaticClass()) && theirs->IsA(SDK::UVerticalBoxSlot::StaticClass()))
+			{
+				SDK::UVerticalBoxSlot* mine = static_cast<SDK::UVerticalBoxSlot*>(placed);
+				SDK::UVerticalBoxSlot* neighbour = static_cast<SDK::UVerticalBoxSlot*>(theirs);
+				mine->SetPadding(neighbour->Padding);
+				mine->SetSize(neighbour->Size);
+				mine->SetHorizontalAlignment(neighbour->HorizontalAlignment);
+				mine->SetVerticalAlignment(neighbour->VerticalAlignment);
+				char padding[96];
+				snprintf(padding, sizeof(padding), "slot copied (padding %g/%g/%g/%g)",
+					neighbour->Padding.Left, neighbour->Padding.Top, neighbour->Padding.Right, neighbour->Padding.Bottom);
+				slotNote = padding;
+			}
+
+			// The key's own icon where the binding is one key the game has an icon
+			// for, set through the button's own SetActionIcon; where the button
+			// shows no icon image (or the game has none) the label names the binding.
+			const KeyLabel key = LabelOf(binding);
 			std::string why;
 			const SDK::FSlateBrush* brush = GameKeyBrush(key.gameKey, why);
 			SDK::UImage** iconSlot = CodexFields::ButtonActionIcon.In(properties, row);
-			SDK::UImage* icon = iconSlot ? *iconSlot : nullptr;
-			if (brush && !icon)
+			const bool iconShown = brush && iconSlot && *iconSlot;
+			if (brush && !iconShown)
 				why = "the action button has no icon image";
-			const bool withIcon = brush && icon;
 
-			std::string label = "Pin to Codex";
-			if (!withIcon && !key.spelled.empty())
+			std::string label = action;
+			if (!iconShown && !key.spelled.empty())
 				label = key.spelled + ": " + label;
 			const std::wstring wide(label.begin(), label.end());
 			name->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(wide.c_str())));
 
-			if (withIcon)
+			if (brush)
 			{
-				icon->SetBrush(*brush);
-				icon->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-				SDK::USizeBox** sizeSlot = CodexFields::ButtonIconSizeBox.In(properties, row);
-				if (sizeSlot && *sizeSlot)
-					(*sizeSlot)->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-				SDK::UWidget** inputSlot = CodexFields::ButtonInputBox.In(properties, row);
-				if (inputSlot && *inputSlot)
-					(*inputSlot)->SetVisibility(SDK::ESlateVisibility::Collapsed);
+				SDK::UCrUW_ActionButton* button = static_cast<SDK::UCrUW_ActionButton*>(row);
+				button->SetActionIcon(*brush);
+				button->SetInputActionWidgetVisibility(false);
 			}
 
 			// The first few rows are logged at INFO for the in-game check, the rest
-			// at DEBUG: one is added per hover.
-			const char* shape = withIcon ? "game icon" : why.c_str();
+			// at DEBUG: rows are added per hover.
+			const char* shape = iconShown ? "game icon" : why.c_str();
 			const std::string bodyClass = body->Class ? body->Class->GetName() : std::string("?");
-			if (g_rowLogs++ < 3)
-				LOG_INFO("CodexTooltipHint: row added (key '%s', %s, in a %s).", key.spelled.c_str(), shape, bodyClass.c_str());
+			if (g_rowLogs++ < 6)
+				LOG_INFO("CodexTooltipHint: row '%s' added (key '%s', %s, %s, in a %s).", action, key.spelled.c_str(), shape, slotNote.c_str(), bodyClass.c_str());
 			else
-				LOG_DEBUG("CodexTooltipHint: row added (key '%s', %s).", key.spelled.c_str(), shape);
+				LOG_DEBUG("CodexTooltipHint: row '%s' added (key '%s', %s).", action, key.spelled.c_str(), shape);
+			return {};
+		}
+
+		// Adds the pin row, and the planner row when that key is set, to one tooltip;
+		// empty on success, else why the pin row could not be.
+		std::string AddRows(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, HintRow& entry)
+		{
+			std::string parents;
+			SDK::UPanelWidget* body = TooltipBody(properties, tooltip, parents);
+			if (!body)
+				return "the tooltip's text is not in a vertical list (found: " + (parents.empty() ? std::string("nothing") : parents) + ")";
+
+			// The text row the new ones are laid out like: "Crafted in", else the header.
+			SDK::USizeBox** crafted = CodexFields::TooltipCraftedIn.In(properties, tooltip);
+			SDK::UUserWidget** header = CodexFields::TooltipInfoWidget.In(properties, tooltip);
+			SDK::UWidget* sibling = (crafted && *crafted && (*crafted)->GetParent() == body) ? static_cast<SDK::UWidget*>(*crafted)
+				: (header ? static_cast<SDK::UWidget*>(*header) : nullptr);
+
+			const std::string pin = AddOneRow(properties, tooltip, body, sibling, CodexConfig::Config::GetGamePinKey(), "Pin to Codex", entry.row);
+			if (!pin.empty())
+				return pin;
+
+			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
+			if (!plannerKey.empty())
+			{
+				const std::string why = AddOneRow(properties, tooltip, body, sibling, plannerKey, "Open in Planner", entry.plannerRow);
+				if (!why.empty())
+					HintProblem("planner row: " + why);
+			}
 			return {};
 		}
 
@@ -419,14 +469,13 @@ namespace CodexTooltipPin
 			return controller && controller->bShowMouseCursor;
 		}
 
-		void WatchTooltips()
+		void WatchTooltips(bool cursorUp)
 		{
 			IPluginHooks* hooks = GetHooks();
 			IPluginObjectProperties* properties = hooks ? hooks->ObjectProperties : nullptr;
 			if (!properties || !CodexRecipes::IsReady())
 				return;
 
-			const bool cursorUp = CursorUp();
 			if (!cursorUp && g_rows.empty())
 				return;
 			if (cursorUp && !g_cursorLogged)
@@ -468,7 +517,7 @@ namespace CodexTooltipPin
 				}
 				else if (!MatchProduct(TooltipTitle(properties, tooltip), TooltipTexture(properties, tooltip)).empty())
 				{
-					const std::string why = AddRow(properties, tooltip, entry);
+					const std::string why = AddRows(properties, tooltip, entry);
 					if (!why.empty())
 						HintProblem(why);
 				}
@@ -486,6 +535,8 @@ namespace CodexTooltipPin
 					continue;
 				if (SDK::UUserWidget* row = entry.row.Get())
 					row->RemoveFromParent();
+				if (SDK::UUserWidget* row = entry.plannerRow.Get())
+					row->RemoveFromParent();
 			}
 			g_rows.clear();
 		}
@@ -493,28 +544,64 @@ namespace CodexTooltipPin
 		// Runs from the game's window messages, on the game thread and before
 		// the game handles the click, which may close the tooltip. So the item
 		// is read here, and only its name is handed on.
-		void OnPinKeyPressed(EModKey /*key*/, EModKeyEvent event)
+		Target ReadTarget()
 		{
-			if (event != EModKeyEvent::Pressed || !CodexRecipes::IsReady())
-				return;
-
-			std::string item;
+			if (!CodexRecipes::IsReady())
+				return {};
 			try
 			{
-				item = ReadOpenTooltipItem();
+				return ReadOpenTarget();
 			}
 			catch (...)
 			{
 				LOG_WARN("CodexTooltipPin: reading the open tooltip failed.");
-				return;
+				return {};
 			}
+		}
 
-			if (item.empty())
+		// The key that opens the planner, when set; a pin key without modifiers
+		// also fires while another key is held, so the pin steps aside for it.
+		bool PlannerKeyHeld()
+		{
+			IPluginHooks* hooks = GetHooks();
+			const std::string key = CodexConfig::Config::GetGamePlannerKey();
+			return !key.empty() && hooks && hooks->Input && hooks->Input->IsKeyHeld && hooks->Input->IsKeyHeld(key.c_str());
+		}
+
+		void OnPinKeyPressed(EModKey /*key*/, EModKeyEvent event)
+		{
+			if (event != EModKeyEvent::Pressed || PlannerKeyHeld())
 				return;
 
-			LOG_INFO("CodexTooltipPin: pin asked for '%s' from the game's tooltip (skipped if a pin already makes it).", item.c_str());
-			CodexUI::PinProductOf(item);
+			const Target target = ReadTarget();
+			if (target.item.empty())
+				return;
+
+			LOG_INFO("CodexTooltipPin: pin asked for '%s' from the game's tooltip (skipped if a pin already makes it).", target.item.c_str());
+			CodexUI::PinProductOf(target.item);
 		}
+
+		// What the planner key was asked to open; the browser is started from the
+		// tick, not from inside the window message.
+		Target g_plannerAsk;
+
+		void OnPlannerKeyPressed(EModKey /*key*/, EModKeyEvent event)
+		{
+			if (event != EModKeyEvent::Pressed)
+				return;
+
+			const Target target = ReadTarget();
+			if (target.item.empty())
+				return;
+
+			LOG_INFO("CodexTooltipPin: planner asked for '%s' from the game's tooltip.", target.item.c_str());
+			g_plannerAsk = target;
+		}
+	}
+
+	bool GameCursorUp()
+	{
+		return g_cursorUp.load(std::memory_order_relaxed);
 	}
 
 	void Init(IPluginSelf* self)
@@ -525,11 +612,38 @@ namespace CodexTooltipPin
 		const char* key = CodexConfig::Config::GetGamePinKey();
 		LOG_DEBUG("CodexTooltipPin: registering game-menu pin keybind '%s'", key);
 		self->hooks->Input->RegisterKeybindByName(key, EModKeyEvent::Pressed, &OnPinKeyPressed);
+
+		const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
+		if (!plannerKey.empty())
+		{
+			LOG_DEBUG("CodexTooltipPin: registering game-menu planner keybind '%s'", plannerKey.c_str());
+			self->hooks->Input->RegisterKeybindByName(plannerKey.c_str(), EModKeyEvent::Pressed, &OnPlannerKeyPressed);
+		}
 	}
 
 	// On the game thread, from the engine tick.
 	void Tick(float deltaSeconds)
 	{
+		// The cursor flag is read here for the render thread (the pinned cards
+		// are editable while a game screen has the cursor up); the objects are
+		// only touched on this thread.
+		bool cursorUp = false;
+		try
+		{
+			cursorUp = CursorUp();
+		}
+		catch (...)
+		{
+		}
+		g_cursorUp.store(cursorUp, std::memory_order_relaxed);
+
+		if (!g_plannerAsk.item.empty())
+		{
+			const Target ask = g_plannerAsk;
+			g_plannerAsk = {};
+			CodexPlanner::Launch(ask.item, ask.title);
+		}
+
 		g_sinceLook += deltaSeconds;
 		if (g_sinceLook < kWatchSeconds)
 			return;
@@ -537,7 +651,7 @@ namespace CodexTooltipPin
 
 		try
 		{
-			WatchTooltips();
+			WatchTooltips(cursorUp);
 		}
 		catch (...)
 		{
@@ -561,7 +675,15 @@ namespace CodexTooltipPin
 			}
 		}
 
+		g_cursorUp.store(false, std::memory_order_relaxed);
+		g_plannerAsk = {};
+
 		if (self && self->hooks->Input && self->hooks->UI)
+		{
 			self->hooks->Input->UnregisterKeybindByName(CodexConfig::Config::GetGamePinKey(), EModKeyEvent::Pressed, &OnPinKeyPressed);
+			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
+			if (!plannerKey.empty())
+				self->hooks->Input->UnregisterKeybindByName(plannerKey.c_str(), EModKeyEvent::Pressed, &OnPlannerKeyPressed);
+		}
 	}
 }

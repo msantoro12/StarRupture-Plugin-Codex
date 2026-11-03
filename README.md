@@ -47,7 +47,7 @@ loader the plugin shows "Needs loader" and stays off.
   same order and at the same spots, once a save has finished loading and the recipe list is ready (a RELOAD of the
   plugin brings them back too). They are saved once for the game, not per save, because recipes are game-wide. A
   saved pin whose recipe the game no longer has is dropped, with a line in the log. Clicking a pin raises that window; unpinning a pin lets the others
-  take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging any pin then moves the group only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the X at the right end of a pin's title bar (shown while the Codex or the Escape menu is open) to unpin it.
+  take its place in the stack, so the pin in front can change. With `PinCentering` on (the default) the group sits in the middle of its edge: across the top on `Top`, down the side on `Left` and `Right`, and it re-centers when a pin is added or removed. Dragging any pin then moves the group only toward or away from the edge, and Clear and the **Arrange pins** button put the group back on the edge, centered. Ungrouped pins are centered only when they are placed (a new pin, a layout switch, Arrange pins); a pin you dragged yourself stays where you put it, and after a restart saved spots count as placed by hand until Arrange pins. Changing `PinLayout` carries the pins over: Right to Left (and back) mirrors them at the same height and distance from the edge, switching to Top lines them up across the top, centered, and switching away from Top puts them at the new edge's default spot (centered along it when `PinCentering` is on). Pins that move on their own glide there in about a fifth of a second; a pin you are dragging never glides. Pins always stay fully on screen: a column or row that fills wraps to the side of the pins that has room, a cascade takes shorter steps when the first pin is near the bottom, and a saved spot is kept on screen when the resolution or window size changes. Use the X at the right end of a pin's title bar (shown while the Codex, the Escape menu or a game screen with the cursor is open) to unpin it.
 - **Right-click to pin** -- right-click an item anywhere the Codex shows one (search results, a
   recipe's inputs and output, the "used in" list) to pin the recipe that makes it. In a pinned
   window, right-click an ingredient to pin its recipe too, so a production chain can be pinned
@@ -62,8 +62,19 @@ loader the plugin shows "Needs loader" and stays off.
   right-click is the game's own action. A `GamePinKey` you set earlier is kept. While the
   tooltip is open and the pin would work, its text ends with a **Pin to Codex** row in the
   game's own action-button style, with the key's icon from the game (the key spelled out when
-  the game has no icon for it), so the key is shown where you need it. The row follows
-  `GamePinKey` and is taken out again when the plugin unloads.
+  the game has no icon for it), so the key is shown where you need it. The row sits in the
+  tooltip's text with the same padding as the rows above it. It follows `GamePinKey` and is
+  taken out again when the plugin unloads.
+- **Open in Planner from the game's menus** -- on the same tooltips, **Ctrl + right-click**
+  (`GamePlannerKey`) opens the production planner for that item, exactly as the Planner button
+  does (it uses the `Planner` choice). A second row, **Open in Planner**, shows the key. The
+  same rules as the pin apply: only items a recipe makes, and not on inventory slots. A plain
+  right-click still pins and does not also open the planner.
+- **Edit pins in the game's screens** -- pinned windows used to be clickable only with the
+  Codex or the Escape menu open. They are now also clickable and draggable while a game screen
+  shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
+  the inventory. Click a pin's X to unpin it or drag a pin to move it there; a click on a pin
+  is taken by the pin, and every other click goes to the game as before.
 - **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
@@ -96,6 +107,7 @@ them as plain text fields.
 | `Menu` | `SearchKey` | `N` | Key to open the recipe search box |
 | `Menu` | `CodexKey` | `Shift+N` | Key to open (or close) the full Codex window |
 | `Menu` | `GamePinKey` | `RightMouseButton` | Key that pins the item in the game's open item tooltip (recipe station, delivery panel, machine menus) |
+| `Menu` | `GamePlannerKey` | `Ctrl+RightMouseButton` | Key that opens the planner for the item in the game's open item tooltip, the same page as the Planner button |
 | `Menu` | `PinLayout` | `Right` | Screen edge pinned recipes start from: `Right`, `Left` or `Top` (dropdown) |
 | `Menu` | `PinArrangement` | `Tile` | How pins sit under the first one: `Tile` or `Cascade` (dropdown) |
 | `Menu` | `PinGrouping` | `Grouped` | Whether pins move together under the first one or each on its own: `Grouped` or `Ungrouped` (dropdown) |

@@ -1,4 +1,5 @@
 #include "codex_ui.h"
+#include "game_tooltip_pin.h"
 #include "Recipes/codex_recipes.h"
 #include "Planner/codex_planner.h"
 #include "Icons/codex_icons.h"
@@ -2477,8 +2478,9 @@ namespace CodexUI
 		}
 
 		// Pinned cards show their edit controls (the unpin X, Open and Planner)
-		// while the Codex is open, the game's Escape menu is, or a loader or
-		// plugin window holds the cursor (the mod loader menu).
+		// while the Codex is open, a game screen has the mouse cursor up (the
+		// Escape menu, a machine menu, the recipe station, the inventory), or a
+		// loader or plugin window holds the cursor (the mod loader menu).
 		bool PinsEditable(IModLoaderImGui* imgui)
 		{
 			if (CodexUIActive(imgui))
@@ -2487,6 +2489,7 @@ namespace CodexUI
 			if (!hooks)
 				return false;
 			return (hooks->GameMenu && hooks->GameMenu->IsPauseMenuOpen())
+				|| CodexTooltipPin::GameCursorUp()
 				|| (hooks->UI && hooks->UI->IsOverlayOpen());
 		}
 

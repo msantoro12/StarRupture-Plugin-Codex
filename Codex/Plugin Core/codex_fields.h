@@ -64,9 +64,7 @@ namespace CodexFields
 	// The hint row: the tooltip's text list and the game's action button.
 	inline PluginLazyField<SDK::USizeBox*>    TooltipCraftedIn{ "CraftedInSizeBox" };   // WBP_ToolTipWidget_C: the "Crafted in" line
 	inline PluginLazyField<SDK::UTextBlock*>  ButtonActionName{ "ActionName" };         // CrUW_ActionButton: the label
-	inline PluginLazyField<SDK::UImage*>      ButtonActionIcon{ "ActionIcon" };         // CrUW_ActionButton: the key icon
-	inline PluginLazyField<SDK::USizeBox*>    ButtonIconSizeBox{ "ActionIconSizeBox" }; // CrUW_ActionButton: holds the key icon
-	inline PluginLazyField<SDK::UWidget*>     ButtonInputBox{ "InputActionWidgetBox" }; // CrUW_ActionButton: holds the Common UI key widget
+	inline PluginLazyField<SDK::UImage*>      ButtonActionIcon{ "ActionIcon" };         // CrUW_ActionButton: the key icon image
 
 	// The SDK's helpers, under the names the plugin uses.
 	using PluginMap::KeysOf;

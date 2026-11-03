@@ -39,6 +39,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"GamePlannerKey",
+			ConfigValueType::Keybind,
+			"Ctrl+RightMouseButton",
+			"Key that opens the item in the game's open item tooltip in the production planner"
+		},
+		{
+			"Menu",
 			"PinLayout",
 			ConfigValueType::Choice,
 			"Right",
@@ -240,6 +247,16 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePinKey", buffer, sizeof(buffer), "RightMouseButton"))
 				return buffer;
 			return "RightMouseButton";
+		}
+
+		// Returns the keybind that opens the item in the game's open item
+		// tooltip in the production planner (default "Ctrl+RightMouseButton").
+		static const char* GetGamePlannerKey()
+		{
+			static char buffer[64];
+			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePlannerKey", buffer, sizeof(buffer), "Ctrl+RightMouseButton"))
+				return buffer;
+			return "Ctrl+RightMouseButton";
 		}
 
 		// Returns the screen edge pins start from: "Right" (default), "Left" or "Top".
