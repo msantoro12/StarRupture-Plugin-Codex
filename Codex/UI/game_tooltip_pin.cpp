@@ -260,8 +260,9 @@ namespace CodexTooltipPin
 				LOG_DEBUG("CodexTooltipHint: no row added: %s.", what.c_str());
 		}
 
-		// A key binding as a row names it: its game key when it is a single key,
-		// else spelled out ("Alt+Right-click").
+		// A key binding as a row names it: the last key, whose icon the row
+		// shows, the keys held with it, and the whole binding spelled out
+		// ("Ctrl+Right-click") for when there is no icon.
 		struct KeyLabel
 		{
 			std::string key;       // the game's name for the binding's last key
@@ -425,7 +426,7 @@ namespace CodexTooltipPin
 			std::string label = action;
 			if (keyAction.DataTable)
 			{
-				button->SetAction(keyAction, false);
+				button->SetAction(keyAction, true); // as the Expand row; the label is set below
 				button->SetInputActionWidgetVisibility(true);
 				button->SetActionNamePadding(true);
 				if (!key.modifiers.empty())
