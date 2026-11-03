@@ -51,7 +51,8 @@ namespace CodexFields
 	inline auto CraftingParametersSize = SR_SIZE_CHECK(FCrCraftingParameters);
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
-	// The game's item tooltip, read when the game-menu pin key is pressed. Found
+	// The game's item tooltip, read when the game-menu pin key is pressed and
+	// when the pin hint is added to it. Found
 	// by name on first use (Blueprint members have no SDK offset to compile in);
 	// a miss leaves that one key doing nothing and the rest of the codex on.
 	inline PluginLazyField<SDK::UUserWidget*> TooltipInfoWidget{ "ItemInfoWidget" }; // WBP_ToolTipWidget_C: the header line
@@ -60,6 +61,15 @@ namespace CodexFields
 	inline PluginLazyField<SDK::FSlateBrush>  ImageBrush{ "Brush" };                 // UImage
 	inline PluginLazyField<bool>              InventoryActive{ "bIsActive" };        // CommonActivatableWidget: false once the screen is closed
 	inline PluginLazyField<SDK::AActor*>      InventoryUsedActor{ "InteractedActor" }; // CrUW_InventoryScreen: the machine in use, null for the player's own inventory
+
+	// The hint row: the tooltip's action prompt and the game's action button.
+	inline PluginLazyField<SDK::UUserWidget*> TooltipPrompt{ "TooltipPrompt" };         // WBP_ToolTipWidget_C: the action prompt
+	inline PluginLazyField<SDK::UWidget*>     TooltipActionsOverlay{ "ActionsOverlay" }; // WBP_ToolTipWidget_C: holds the prompt
+	inline PluginLazyField<SDK::UVerticalBox*> PromptActionsBox{ "ActionsBox" };        // WBP_TooltipPrompt_C: the list of action buttons
+	inline PluginLazyField<SDK::UTextBlock*>  ButtonActionName{ "ActionName" };         // CrUW_ActionButton: the label
+	inline PluginLazyField<SDK::UImage*>      ButtonActionIcon{ "ActionIcon" };         // CrUW_ActionButton: the key icon
+	inline PluginLazyField<SDK::USizeBox*>    ButtonIconSizeBox{ "ActionIconSizeBox" }; // CrUW_ActionButton: holds the key icon
+	inline PluginLazyField<SDK::UWidget*>     ButtonInputBox{ "InputActionWidgetBox" }; // CrUW_ActionButton: holds the Common UI key widget
 
 	// The SDK's helpers, under the names the plugin uses.
 	using PluginMap::KeysOf;

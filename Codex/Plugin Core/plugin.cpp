@@ -16,10 +16,11 @@ IPluginSelf* GetSelf() { return g_self; }
 
 // Drives CodexIcons::Tick() so icon loads/retries happen once per engine tick, and
 // CodexUI::Tick() so the saved pins are put back once the recipes are ready.
-static void OnEngineTick(float /*deltaSeconds*/)
+static void OnEngineTick(float deltaSeconds)
 {
 	CodexIcons::Tick();
 	CodexUI::Tick();
+	CodexTooltipPin::Tick(deltaSeconds);
 }
 
 // Fires once a save is fully loaded into the world — (re)scans the recipe
