@@ -52,9 +52,9 @@ namespace CodexFields
 	inline auto NestedCollectionsSize = SR_SIZE_CHECK(FNestedItemRecipeCollectionArray);
 
 	// The game's item tooltip, read when the game-menu pin key is pressed and
-	// when the pin hint is added to it. Found
-	// by name on first use (Blueprint members have no SDK offset to compile in);
-	// a miss leaves that one key doing nothing and the rest of the codex on.
+	// when the pin hint is added to it. Found by name on first use (Blueprint
+	// members have no SDK offset to compile in); a miss leaves that one key and
+	// the hint doing nothing and the rest of the codex on.
 	inline PluginLazyField<SDK::UUserWidget*> TooltipInfoWidget{ "ItemInfoWidget" }; // WBP_ToolTipWidget_C: the header line
 	inline PluginLazyField<SDK::UTextBlock*>  TooltipItemName{ "ItemName" };         // WBP_HeaderLine_C: the item's name
 	inline PluginLazyField<SDK::UImage*>      TooltipIcon{ "Icon" };                 // Cr_UW_InventoryToolTip: the item's icon

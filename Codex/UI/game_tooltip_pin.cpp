@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -88,7 +89,6 @@ namespace CodexTooltipPin
 			const std::vector<std::string>& picked = title.empty() ? byIcon : both;
 			return picked.size() == 1 ? picked.front() : std::string();
 		}
-
 
 		// What one pass over GObjects found. The pointers are good for the tick
 		// that made it and no longer.
@@ -365,6 +365,12 @@ namespace CodexTooltipPin
 			if (!name)
 				return "the action button has no label";
 
+			// Attached first: the game's own construct code runs on attach and
+			// would otherwise overwrite what is set below.
+			row->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
+			box->AddChild(row);
+			entry.row.Set(row);
+
 			// The key's own icon where the pin key is one key the game has an icon
 			// for; otherwise the label names the binding.
 			const KeyLabel key = LabelOfPinKey();
@@ -373,7 +379,9 @@ namespace CodexTooltipPin
 			SDK::UImage* icon = iconSlot ? *iconSlot : nullptr;
 			const bool withIcon = brush && icon;
 
-			const std::string label = withIcon ? "Pin to Codex" : key.spelled + ": Pin to Codex";
+			std::string label = "Pin to Codex";
+			if (!withIcon && !key.spelled.empty())
+				label = key.spelled + ": " + label;
 			const std::wstring wide(label.begin(), label.end());
 			name->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(wide.c_str())));
 
@@ -409,10 +417,6 @@ namespace CodexTooltipPin
 					overlay->SetVisibility(SDK::ESlateVisibility::SelfHitTestInvisible);
 				}
 			}
-
-			row->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-			box->AddChild(row);
-			entry.row.Set(row);
 
 			LOG_INFO("CodexTooltipHint: row added (key '%s', %s, prompt was %d, overlay was %d).",
 				key.spelled.c_str(),
@@ -474,8 +478,13 @@ namespace CodexTooltipPin
 				LOG_INFO("CodexTooltipHint: the cursor is up; watching for item tooltips.");
 			}
 
+			// The pass over GObjects costs what it costs on this machine, so the
+			// wait before the next one is set from how long this one took: 40 times
+			// that, never under kWatchSeconds nor over kIdleSeconds.
+			const auto started = std::chrono::steady_clock::now();
 			const Observation seen = Observe(properties);
-			g_lookEvery = seen.shown.empty() ? kWatchSeconds : kIdleSeconds;
+			const float took = std::chrono::duration<float>(std::chrono::steady_clock::now() - started).count();
+			g_lookEvery = seen.shown.empty() ? std::clamp(took * 40.0f, kWatchSeconds, kIdleSeconds) : kIdleSeconds;
 			if (seen.shown.empty() || PinTarget(properties, seen, false).empty())
 				return;
 			g_lookEvery = kWatchSeconds;
