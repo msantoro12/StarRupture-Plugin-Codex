@@ -46,6 +46,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"DumpTooltipWidgets",
+			ConfigValueType::Boolean,
+			"true",
+			"Diagnostic: write the game's item tooltip widget tree to ModLoader.log, once per tooltip kind"
+		},
+		{
+			"Menu",
 			"PinLayout",
 			ConfigValueType::Choice,
 			"Right",
@@ -257,6 +264,12 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePlannerKey", buffer, sizeof(buffer), "Ctrl+RightMouseButton"))
 				return buffer;
 			return "Ctrl+RightMouseButton";
+		}
+
+		// Whether the item tooltip's widget tree is written to the log (diagnostic).
+		static bool GetDumpTooltipWidgets()
+		{
+			return s_self ? s_self->config->ReadBool(s_self, "Menu", "DumpTooltipWidgets", true) : false;
 		}
 
 		// Returns the screen edge pins start from: "Right" (default), "Left" or "Top".

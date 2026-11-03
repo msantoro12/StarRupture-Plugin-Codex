@@ -10,6 +10,7 @@
 #include "ChimeraUI_classes.hpp"
 #include "BP_CommonInput_KeyboardMouse_classes.hpp"
 #include "WBP_ActionButton_classes.hpp"
+#include "CommonUI_classes.hpp"
 #include "object_ref.h"
 
 #include <algorithm>
@@ -242,6 +243,7 @@ namespace CodexTooltipPin
 			ObjectRef<SDK::UUserWidget> tooltip; // compared, never called
 			ObjectRef<SDK::UUserWidget> row;        // "Pin to Codex"
 			ObjectRef<SDK::UUserWidget> plannerRow; // "Open in Planner"
+			int kind = 0;                           // diagnostic: 1 rows added, 2 inventory slot
 		};
 
 		std::vector<HintRow> g_rows;
@@ -251,6 +253,7 @@ namespace CodexTooltipPin
 		int g_slotLogs = 0;
 		bool g_cursorLogged = false;
 		std::atomic<bool> g_cursorUp{ false }; // for the render thread
+		bool g_dumpWidgets = false; // diagnostic, read once at Init
 
 		void HintProblem(const std::string& what)
 		{
@@ -462,6 +465,178 @@ namespace CodexTooltipPin
 			return {};
 		}
 
+		// ---- Diagnostic: the tooltip's widget tree, written once per tooltip kind ----
+
+		bool g_dumped[3] = {};
+
+		std::string NameOf(const SDK::UObject* object)
+		{
+			return object ? object->GetName() : std::string("null");
+		}
+
+		std::string ClassOf(const SDK::UObject* object)
+		{
+			return object && object->Class ? object->Class->GetName() : std::string("null");
+		}
+
+		void* RawField(IPluginObjectProperties* properties, void* object, const char* name)
+		{
+			PluginPropertyHandle handle = object ? properties->FindPropertyOnObject(object, name) : nullptr;
+			return handle ? properties->GetPropertyRawPtr(object, handle) : nullptr;
+		}
+
+		std::string Margin(const SDK::FMargin& m)
+		{
+			char text[80];
+			snprintf(text, sizeof(text), "%g/%g/%g/%g", m.Left, m.Top, m.Right, m.Bottom);
+			return text;
+		}
+
+		std::string BrushText(const SDK::FSlateBrush* brush)
+		{
+			if (!brush)
+				return "no brush";
+			char text[320];
+			const SDK::FLinearColor& tint = brush->TintColor.SpecifiedColor;
+			snprintf(text, sizeof(text), "res=%s(%s) size=%gx%g drawAs=%d margin=%s tint=%.2f/%.2f/%.2f/%.2f",
+				NameOf(brush->ResourceObject).c_str(), ClassOf(brush->ResourceObject).c_str(),
+				static_cast<double>(brush->ImageSize.X), static_cast<double>(brush->ImageSize.Y), static_cast<int>(brush->DrawAs),
+				Margin(brush->Margin).c_str(), tint.R, tint.G, tint.B, tint.A);
+			return text;
+		}
+
+		std::string RowHandleText(const SDK::FDataTableRowHandle* handle)
+		{
+			if (!handle)
+				return "none";
+			return NameOf(handle->DataTable) + ":" + handle->RowName.ToString();
+		}
+
+		std::string TextOf(const SDK::FText* text)
+		{
+			return text ? SDK::UKismetTextLibrary::Conv_TextToString(*text).ToString() : std::string("-");
+		}
+
+		std::string SlotText(const SDK::UWidget* widget)
+		{
+			const SDK::UPanelSlot* slot = widget->Slot;
+			if (!slot)
+				return "slot=none";
+			std::string out = "slot=" + ClassOf(slot);
+			auto add = [&](const SDK::FMargin& padding, SDK::EHorizontalAlignment h, SDK::EVerticalAlignment v)
+			{
+				out += " pad=" + Margin(padding) + " h=" + std::to_string(static_cast<int>(h)) + " v=" + std::to_string(static_cast<int>(v));
+			};
+			if (slot->IsA(SDK::UVerticalBoxSlot::StaticClass()))
+			{
+				auto* s = static_cast<const SDK::UVerticalBoxSlot*>(slot);
+				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
+				out += " sizeRule=" + std::to_string(static_cast<int>(s->Size.SizeRule)) + " fill=" + std::to_string(s->Size.Value);
+			}
+			else if (slot->IsA(SDK::UHorizontalBoxSlot::StaticClass()))
+			{
+				auto* s = static_cast<const SDK::UHorizontalBoxSlot*>(slot);
+				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
+				out += " sizeRule=" + std::to_string(static_cast<int>(s->Size.SizeRule)) + " fill=" + std::to_string(s->Size.Value);
+			}
+			else if (slot->IsA(SDK::UOverlaySlot::StaticClass()))
+			{
+				auto* s = static_cast<const SDK::UOverlaySlot*>(slot);
+				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
+			}
+			else if (slot->IsA(SDK::UBorderSlot::StaticClass()))
+			{
+				auto* s = static_cast<const SDK::UBorderSlot*>(slot);
+				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
+			}
+			else if (slot->IsA(SDK::USizeBoxSlot::StaticClass()))
+			{
+				auto* s = static_cast<const SDK::USizeBoxSlot*>(slot);
+				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
+			}
+			return out;
+		}
+
+		// What a widget of a class the hint cares about holds: text, image,
+		// the key icon's input action, the action button's own settings.
+		std::string DetailText(IPluginObjectProperties* properties, SDK::UWidget* widget)
+		{
+			std::string out;
+			if (widget->IsA(SDK::UTextBlock::StaticClass()))
+			{
+				auto* text = static_cast<SDK::UTextBlock*>(widget);
+				out += " text=\"" + SDK::UKismetTextLibrary::Conv_TextToString(text->GetText()).ToString() + "\"";
+				if (auto* justify = static_cast<uint8_t*>(RawField(properties, widget, "Justification")))
+					out += " justify=" + std::to_string(*justify);
+			}
+			if (widget->IsA(SDK::UImage::StaticClass()))
+				out += " brush{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "Brush"))) + "}";
+			if (widget->IsA(SDK::UCommonActionWidget::StaticClass()))
+			{
+				if (auto* actions = static_cast<SDK::TArray<SDK::FDataTableRowHandle>*>(RawField(properties, widget, "InputActions")))
+				{
+					out += " inputActions=[";
+					for (int i = 0; i < actions->Num(); ++i)
+						out += (i ? "," : "") + RowHandleText(&(*actions)[i]);
+					out += "]";
+				}
+				if (auto* enhanced = static_cast<SDK::UObject**>(RawField(properties, widget, "EnhancedInputAction")))
+					out += " enhanced=" + NameOf(*enhanced);
+				out += " icon{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "Icon"))) + "}";
+				out += " rim{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "IconRimBrush"))) + "}";
+			}
+			if (widget->IsA(SDK::UCrUW_ActionButton::StaticClass()))
+			{
+				out += " buttonText=\"" + TextOf(static_cast<const SDK::FText*>(RawField(properties, widget, "ButtonText"))) + "\"";
+				for (const char* flag : { "bShouldBeVisible", "bOverrideDefaultColor", "bIsDefault", "bIsBlack", "ShowButton", "IsEnabled" })
+					if (auto* value = static_cast<bool*>(RawField(properties, widget, flag)))
+						out += std::string(" ") + flag + "=" + (*value ? "1" : "0");
+				for (const char* member : { "InputActionWidget", "ActionIcon", "ButtonImage" })
+					if (auto* value = static_cast<SDK::UObject**>(RawField(properties, widget, member)))
+						out += std::string(" ") + member + "=" + NameOf(*value);
+			}
+			for (const char* handle : { "ExpandHandle", "QuickTransferRowHandle", "ShowTooltipRowHandle" })
+				if (auto* value = static_cast<const SDK::FDataTableRowHandle*>(RawField(properties, widget, handle)))
+					out += std::string(" ") + handle + "=" + RowHandleText(value);
+			if (auto* count = static_cast<int32_t*>(RawField(properties, widget, "VisibleActionsCount")))
+				out += " VisibleActionsCount=" + std::to_string(*count);
+			return out;
+		}
+
+		void DumpWidget(IPluginObjectProperties* properties, SDK::UWidget* widget, int depth, int index)
+		{
+			if (!widget || depth > 24)
+				return;
+			const std::string indent(static_cast<size_t>(depth) * 2, ' ');
+			LOG_INFO("CodexTooltipDump: %s[%d] %s '%s' vis=%d %s%s", indent.c_str(), index, ClassOf(widget).c_str(), NameOf(widget).c_str(),
+				static_cast<int>(widget->Visibility), SlotText(widget).c_str(), DetailText(properties, widget).c_str());
+
+			if (widget->IsA(SDK::UPanelWidget::StaticClass()))
+			{
+				auto* panel = static_cast<SDK::UPanelWidget*>(widget);
+				const int count = panel->GetChildrenCount();
+				for (int i = 0; i < count; ++i)
+					DumpWidget(properties, panel->GetChildAt(i), depth + 1, i);
+			}
+			else if (widget->IsA(SDK::UUserWidget::StaticClass()))
+			{
+				auto* user = static_cast<SDK::UUserWidget*>(widget);
+				if (user->WidgetTree)
+					DumpWidget(properties, user->WidgetTree->RootWidget, depth + 1, 0);
+			}
+		}
+
+		void DumpTooltip(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, int kind)
+		{
+			if (kind < 1 || kind > 2 || g_dumped[kind])
+				return;
+			g_dumped[kind] = true;
+			LOG_INFO("CodexTooltipDump: ---- %s tooltip '%s' (%s), title '%s' ----", kind == 1 ? "recipe (rows added)" : "inventory slot",
+				NameOf(tooltip).c_str(), ClassOf(tooltip).c_str(), TooltipTitle(properties, tooltip).c_str());
+			DumpWidget(properties, tooltip, 0, 0);
+			LOG_INFO("CodexTooltipDump: ---- end ----");
+		}
+
 		// Whether the player's cursor is up: the only time a tooltip can be open.
 		bool CursorUp()
 		{
@@ -500,8 +675,14 @@ namespace CodexTooltipPin
 			for (SDK::UUserWidget* tooltip : seen.shown)
 			{
 				const ObjectRef<SDK::UUserWidget> ref(tooltip);
-				if (std::any_of(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; }))
+				const auto known = std::find_if(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; });
+				if (known != g_rows.end())
+				{
+					// A look after the rows went in, so the game's own setup has run.
+					if (g_dumpWidgets)
+						DumpTooltip(properties, tooltip, known->kind);
 					continue;
+				}
 
 				HintRow entry;
 				entry.tooltip = ref;
@@ -513,6 +694,7 @@ namespace CodexTooltipPin
 
 				if (!slot.empty())
 				{
+					entry.kind = 2;
 					if (g_slotLogs++ < 3)
 						LOG_INFO("CodexTooltipHint: no row on a tooltip of the inventory slot '%s' (the game's own right-click).", slot.c_str());
 				}
@@ -521,6 +703,8 @@ namespace CodexTooltipPin
 					const std::string why = AddRows(properties, tooltip, entry);
 					if (!why.empty())
 						HintProblem(why);
+					else
+						entry.kind = 1;
 				}
 				g_rows.push_back(entry); // kept even without a row, so this tooltip is not looked at again
 			}
@@ -620,6 +804,8 @@ namespace CodexTooltipPin
 	{
 		if (!self->hooks->Input || !self->hooks->UI)
 			return;
+
+		g_dumpWidgets = CodexConfig::Config::GetDumpTooltipWidgets();
 
 		const char* key = CodexConfig::Config::GetGamePinKey();
 		LOG_DEBUG("CodexTooltipPin: registering game-menu pin keybind '%s'", key);
