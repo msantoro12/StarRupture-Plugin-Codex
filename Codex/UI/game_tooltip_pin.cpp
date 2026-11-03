@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -581,9 +582,19 @@ namespace CodexTooltipPin
 			CodexUI::PinProductOf(target.item);
 		}
 
-		// What the planner key was asked to open; the browser is started from the
-		// tick, not from inside the window message.
-		Target g_plannerAsk;
+		// The item the planner key was asked to open; the browser is started from
+		// the tick, not from inside the window message. A keybind callback and the
+		// tick may not share a thread, so the string is behind a mutex.
+		std::mutex  g_plannerAskLock;
+		std::string g_plannerAskItem;
+
+		std::string TakePlannerAsk()
+		{
+			std::lock_guard<std::mutex> lock(g_plannerAskLock);
+			std::string item;
+			item.swap(g_plannerAskItem);
+			return item;
+		}
 
 		void OnPlannerKeyPressed(EModKey /*key*/, EModKeyEvent event)
 		{
@@ -595,7 +606,8 @@ namespace CodexTooltipPin
 				return;
 
 			LOG_INFO("CodexTooltipPin: planner asked for '%s' from the game's tooltip.", target.item.c_str());
-			g_plannerAsk = target;
+			std::lock_guard<std::mutex> lock(g_plannerAskLock);
+			g_plannerAskItem = target.item;
 		}
 	}
 
@@ -634,14 +646,22 @@ namespace CodexTooltipPin
 		}
 		catch (...)
 		{
+			// A failed read counts as no cursor; the watch below logs its own failures.
 		}
 		g_cursorUp.store(cursorUp, std::memory_order_relaxed);
 
-		if (!g_plannerAsk.item.empty())
+		const std::string askedItem = TakePlannerAsk();
+		if (!askedItem.empty())
 		{
-			const Target ask = g_plannerAsk;
-			g_plannerAsk = {};
-			CodexPlanner::Launch(ask.item, ask.title);
+			// The recipe's own display name, as the Planner button passes it.
+			for (const CodexRecipes::RecipeInfo& recipe : CodexRecipes::GetAll())
+			{
+				if (recipe.output.uniqueItemName == askedItem)
+				{
+					CodexPlanner::Launch(askedItem, recipe.output.displayName);
+					break;
+				}
+			}
 		}
 
 		g_sinceLook += deltaSeconds;
@@ -676,7 +696,7 @@ namespace CodexTooltipPin
 		}
 
 		g_cursorUp.store(false, std::memory_order_relaxed);
-		g_plannerAsk = {};
+		TakePlannerAsk();
 
 		if (self && self->hooks->Input && self->hooks->UI)
 		{

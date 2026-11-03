@@ -3,10 +3,10 @@ Search box opens centred and can be dragged (the move cursor shows where); it re
 New option PinLayout: pinned recipes start at the right, left or top edge
 New option PinArrangement: pins tile under the first one (default) or cascade one title bar apart
 New option PinSpacing: space between tiled pins (the config page slider, 1 to 50 screen pixels, default 6); it replaces the old on/off PinGap, which is no longer read
-Drag any pin while the Codex, the mod loader overlay (F2) or the Escape menu is open and the whole group follows; the move cursor shows where it can be grabbed while the Codex or the overlay is open
+Drag any pin while the Codex, the mod loader overlay (F2), the Escape menu or a game screen with the cursor is open and the whole group follows; the move cursor shows where it can be grabbed while the Codex or the overlay is open
 Where the group is dropped is remembered for Tile and Cascade separately and kept between sessions (new options PinTileOffset, PinCascadeOffset)
 Arrange pins button on the recipe window forgets the dropped spot for the current arrangement and puts the pins back on the edge
-Pinned windows have a Planner button, same as the recipe tab (shown while the Codex or the Escape menu is open, like Open)
+Pinned windows have a Planner button, same as the recipe tab (shown while the Codex, the Escape menu or a game screen with the cursor is open, like Open)
 Needs a mod loader with plugin interface v71; on an older loader Codex shows "Needs loader" and stays off
 The recipe window's redundant Close button is gone (use the X or Esc)
 Planner opens the StarRupture Planner's add-item link, adding the recipe's output at one machine's output
@@ -33,5 +33,5 @@ Pin from the game's own menus (recipe station, company delivery panel, machine m
 The game's item tooltip ends with a "Pin to Codex" row in the game's own action-button style, with the key's icon, whenever pinning from it would work (not on inventory slots; only for items a recipe makes); it follows GamePinKey
 The game tooltip's "Pin to Codex" row now sits in the tooltip's text with the same padding as the other rows, instead of on its bottom border
 The key icon on that row is set through the action button's own icon call
-Ctrl+right-click on the game's item tooltip opens the production planner for that item, the same page as the Planner button (new option GamePlannerKey); a second "Open in Planner" row shows the key, with the same rules as the pin row
-Pinned windows can be clicked and dragged while a game screen shows the cursor (machine menus, the recipe station, the corporation terminal, the inventory), not only with the Codex or the Escape menu open; needs the mod loader build that shares the mouse on those screens
+Ctrl+right-click on the game's item tooltip opens the production planner for that item, the same page as the Planner button (new option GamePlannerKey, empty turns it off); a second "Open in Planner" row shows the key, with the same rules as the pin row
+Pinned windows can be clicked and dragged while a game screen shows the cursor (machine menus, the recipe station, the corporation terminal, the inventory), not only with the Codex or the Escape menu open; needs the mod loader build that shares the mouse on those screens (the release after 1.22.1); on an older loader the pins are editable only as before

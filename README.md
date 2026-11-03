@@ -32,7 +32,7 @@ loader the plugin shows "Needs loader" and stays off.
   column for right and left, along a row for top, starting a new column or row at the screen
   margin when one fills -- with a gap between them that `PinSpacing` sets (1 to 50 screen pixels), and `Cascade`
   steps each one a title bar down and in. Pinned windows never block game input. While the
-  Codex (`Shift+N`), the mod loader overlay (`F2`) or the Escape menu is open, drag any
+  Codex (`Shift+N`), the mod loader overlay (`F2`), the Escape menu or a game screen with the cursor is open, drag any
   pin and the whole group follows it; the move cursor shows where it can be grabbed while the Codex
   or the overlay is open (over the Escape menu the game's own cursor stays). Tile and
   Cascade each remember where you dropped the group, across sessions. Pressing and dragging
@@ -51,8 +51,8 @@ loader the plugin shows "Needs loader" and stays off.
 - **Right-click to pin** -- right-click an item anywhere the Codex shows one (search results, a
   recipe's inputs and output, the "used in" list) to pin the recipe that makes it. In a pinned
   window, right-click an ingredient to pin its recipe too, so a production chain can be pinned
-  step by step. It works wherever pins can be edited: with the Codex, the mod loader overlay (`F2`) or the
-  Escape menu open. An item whose recipe is already pinned is not added twice; items nothing makes
+  step by step. It works wherever pins can be edited: with the Codex, the mod loader overlay (`F2`), the
+  Escape menu or a game screen with the cursor open. An item whose recipe is already pinned is not added twice; items nothing makes
   (raw resources) do nothing.
 - **Pin from the game's menus** -- in the recipe station, the company delivery panel or a
   machine's menu, hover an item until the game shows its tooltip, then right-click
@@ -69,13 +69,17 @@ loader the plugin shows "Needs loader" and stays off.
   (`GamePlannerKey`) opens the production planner for that item, exactly as the Planner button
   does (it uses the `Planner` choice). A second row, **Open in Planner**, shows the key. The
   same rules as the pin apply: only items a recipe makes, and not on inventory slots. A plain
-  right-click still pins and does not also open the planner.
+  right-click still pins and does not also open the planner. Clear `GamePlannerKey` to turn the
+  planner key off.
 - **Edit pins in the game's screens** -- pinned windows used to be clickable only with the
   Codex or the Escape menu open. They are now also clickable and draggable while a game screen
   shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
   the inventory. Click a pin's X to unpin it or drag a pin to move it there; a click on a pin
-  is taken by the pin, and every other click goes to the game as before.
-- **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
+  is taken by the pin, and every other click goes to the game as before. This needs the mod
+  loader build that shares the mouse on game screens (the loader release after 1.22.1); on an
+  older loader the pins stay as they were, editable only with the Codex, the overlay or the
+  Escape menu open.
+- **Planner** -- the recipe tab and every pinned window (while the Codex, the Escape menu or a game screen with the cursor is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
   (the default) adds the item at one machine's output, starruptureplanner.com and
