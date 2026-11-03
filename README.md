@@ -57,13 +57,13 @@ loader the plugin shows "Needs loader" and stays off.
 - **Pin from the game's menus** -- in the recipe station, the company delivery panel or a
   machine's menu, hover an item until the game shows its tooltip, then right-click
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
-  the item in the open tooltip is pinned, so nothing happens without one. It does nothing while
-  the player's own inventory screen is open, where right-click is the game's own action on a
-  slot. A `GamePinKey` you set earlier is kept. While the tooltip is open and the pin would
-  work, it carries a **Pin to Codex** row in the game's own action-hint style, with the key's
-  icon from the game (the key spelled out when the game has no icon for it), so the key is
-  shown where you need it. The row follows `GamePinKey` and is taken out again when the plugin
-  unloads.
+  the item in the open tooltip is pinned, so nothing happens without one. It does nothing on
+  an inventory slot's tooltip (your own inventory, or the one shown beside a machine), where
+  right-click is the game's own action. A `GamePinKey` you set earlier is kept. While the
+  tooltip is open and the pin would work, its text ends with a **Pin to Codex** row in the
+  game's own action-button style, with the key's icon from the game (the key spelled out when
+  the game has no icon for it), so the key is shown where you need it. The row follows
+  `GamePinKey` and is taken out again when the plugin unloads.
 - **Planner** -- the recipe tab and every pinned window (while the Codex or the Escape menu is open, like
   Open) have a button that opens a production planner for the recipe's output in
   your browser. Choose the planner with `Planner`: the StarRupture Planner
