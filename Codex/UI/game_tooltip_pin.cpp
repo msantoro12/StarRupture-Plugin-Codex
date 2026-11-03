@@ -8,9 +8,8 @@
 #include "Plugin Core/codex_fields.h"
 
 #include "ChimeraUI_classes.hpp"
-#include "BP_CommonInput_KeyboardMouse_classes.hpp"
+#include "CommonUI_structs.hpp"
 #include "WBP_ActionButton_classes.hpp"
-#include "CommonUI_classes.hpp"
 #include "object_ref.h"
 
 #include <algorithm>
@@ -228,13 +227,13 @@ namespace CodexTooltipPin
 		// ---- The hint: "Pin to Codex" and "Open in Planner" rows in the tooltip's body ----
 		//
 		// The tooltip (WBP_ToolTipWidget_C) lays its text out in a vertical list
-		// that holds the header, the description and "Crafted in". The row is the
-		// game's own WBP_ActionButton_C, appended to that list, so it sits at the
-		// foot of the text with the list's own spacing and the tooltip grows to
-		// hold it. The game's action prompt, which hangs below the tooltip and
-		// has its own native rows, is left as it is. The key's icon comes from the
-		// game's keyboard-and-mouse input data. One row per tooltip, taken out
-		// again on unload.
+		// that holds the header, the description and "Crafted in", and ends with
+		// a spacer that keeps the text off the frame's bottom edge. Each row is
+		// the game's own WBP_ActionButton_C, set up as the tooltip's own "Expand"
+		// row is: that row's slot, and the key icon shown through the button's
+		// input action. The rows go in above the closing spacer. The game's
+		// action prompt, which hangs below the tooltip, is left as it is. One set
+		// of rows per tooltip, taken out again on unload.
 
 		constexpr float kWatchSeconds = 0.25f; // between looks for a new tooltip
 
@@ -243,7 +242,6 @@ namespace CodexTooltipPin
 			ObjectRef<SDK::UUserWidget> tooltip; // compared, never called
 			ObjectRef<SDK::UUserWidget> row;        // "Pin to Codex"
 			ObjectRef<SDK::UUserWidget> plannerRow; // "Open in Planner"
-			int kind = 0;                           // diagnostic: 1 rows added, 2 inventory slot
 		};
 
 		std::vector<HintRow> g_rows;
@@ -253,7 +251,6 @@ namespace CodexTooltipPin
 		int g_slotLogs = 0;
 		bool g_cursorLogged = false;
 		std::atomic<bool> g_cursorUp{ false }; // for the render thread
-		bool g_dumpWidgets = false; // diagnostic, read once at Init
 
 		void HintProblem(const std::string& what)
 		{
@@ -267,8 +264,9 @@ namespace CodexTooltipPin
 		// else spelled out ("Alt+Right-click").
 		struct KeyLabel
 		{
-			std::string gameKey; // the game's name for the key, when single
-			std::string spelled; // the whole binding for a person
+			std::string key;       // the game's name for the binding's last key
+			std::string modifiers; // the keys held with it, for a person ("Ctrl")
+			std::string spelled;   // the whole binding for a person
 		};
 
 		std::string FriendlyKey(const std::string& token)
@@ -295,46 +293,49 @@ namespace CodexTooltipPin
 
 			KeyLabel label;
 			for (size_t i = 0; i < tokens.size(); ++i)
+			{
 				label.spelled += (i ? "+" : "") + FriendlyKey(tokens[i]);
-			if (tokens.size() == 1)
-				label.gameKey = tokens.front();
+				if (i + 1 < tokens.size())
+					label.modifiers += (i ? "+" : "") + FriendlyKey(tokens[i]);
+			}
+			if (!tokens.empty())
+				label.key = tokens.back();
 			return label;
 		}
 
-		// The game's brush for a key, from the keyboard-and-mouse input data the
-		// Common UI action widgets read their key icons from: the per-key list
-		// first, then the lists of keys that share a brush, the order Common UI
-		// itself looks them up in. Null when the game has none for it, and why.
-		const SDK::FSlateBrush* GameKeyBrush(const std::string& gameKey, std::string& why)
+		// The input action the key icon is drawn from: the row of the tooltip's
+		// own action table (the one its "Expand" row names) whose keyboard key is
+		// `key`. The table is null when there is none, and `why` says why.
+		SDK::FDataTableRowHandle KeyAction(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, const std::string& key, std::string& why)
 		{
-			if (gameKey.empty())
+			SDK::FDataTableRowHandle found{};
+			const SDK::FDataTableRowHandle* expand = CodexFields::TooltipExpandHandle.In(properties, tooltip);
+			SDK::UDataTable* table = expand ? expand->DataTable : nullptr;
+			if (!table)
 			{
-				why = "the binding is more than one key";
-				return nullptr;
+				why = "the tooltip names no input action table";
+				return found;
 			}
-			SDK::UBP_CommonInput_KeyboardMouse_C* data = SDK::UBP_CommonInput_KeyboardMouse_C::GetDefaultObj();
-			if (!data)
+			if (!table->RowStruct || table->RowStruct->GetName() != "CommonInputActionDataBase")
 			{
-				why = "the keyboard-and-mouse input data is not loaded";
-				return nullptr;
+				why = "the tooltip's action table is not one of input actions";
+				return found;
 			}
-			for (int i = 0; i < data->InputBrushDataMap.Num(); ++i)
+			for (int i = 0; i < table->RowMap.NumAllocated(); ++i)
 			{
-				const SDK::FCommonInputKeyBrushConfiguration& entry = data->InputBrushDataMap[i];
-				if (EqualsNoCase(entry.Key.KeyName.ToString(), gameKey))
-					return &entry.KeyBrush;
+				if (!table->RowMap.IsValidIndex(i))
+					continue;
+				const auto& row = table->RowMap[i];
+				const auto* action = reinterpret_cast<const SDK::FCommonInputActionDataBase*>(row.Value());
+				if (action && EqualsNoCase(action->KeyboardInputTypeInfo.Key.KeyName.ToString(), key))
+				{
+					found.DataTable = table;
+					found.RowName = row.Key();
+					return found;
+				}
 			}
-			for (int i = 0; i < data->InputBrushKeySets.Num(); ++i)
-			{
-				const SDK::FCommonInputKeySetBrushConfiguration& set = data->InputBrushKeySets[i];
-				for (int k = 0; k < set.Keys.Num(); ++k)
-					if (EqualsNoCase(set.Keys[k].KeyName.ToString(), gameKey))
-						return &set.KeyBrush;
-			}
-			why = "the input data lists no brush for '" + gameKey + "' (" +
-				std::to_string(data->InputBrushDataMap.Num()) + " single keys, " +
-				std::to_string(data->InputBrushKeySets.Num()) + " key sets)";
-			return nullptr;
+			why = "the game's input actions have none on '" + key + "'";
+			return found;
 		}
 
 		// The vertical list the tooltip's text is laid out in: the parent of its
@@ -359,10 +360,41 @@ namespace CodexTooltipPin
 			return nullptr;
 		}
 
-		// Adds one action row to the tooltip's text list, set up like the text
-		// rows around it; empty on success, else why it could not.
+		// A vertical-list slot's layout, kept by value.
+		struct SlotLayout
+		{
+			bool valid = false;
+			SDK::FMargin padding{};
+			SDK::FSlateChildSize size{};
+			SDK::EHorizontalAlignment horizontal{};
+			SDK::EVerticalAlignment vertical{};
+		};
+
+		SlotLayout LayoutOf(const SDK::UPanelSlot* slot)
+		{
+			SlotLayout layout;
+			if (!slot || !slot->IsA(SDK::UVerticalBoxSlot::StaticClass()))
+				return layout;
+			const SDK::UVerticalBoxSlot* theirs = static_cast<const SDK::UVerticalBoxSlot*>(slot);
+			layout = { true, theirs->Padding, theirs->Size, theirs->HorizontalAlignment, theirs->VerticalAlignment };
+			return layout;
+		}
+
+		void Apply(SDK::UPanelSlot* slot, const SlotLayout& layout)
+		{
+			if (!layout.valid || !slot || !slot->IsA(SDK::UVerticalBoxSlot::StaticClass()))
+				return;
+			SDK::UVerticalBoxSlot* mine = static_cast<SDK::UVerticalBoxSlot*>(slot);
+			mine->SetPadding(layout.padding);
+			mine->SetSize(layout.size);
+			mine->SetHorizontalAlignment(layout.horizontal);
+			mine->SetVerticalAlignment(layout.vertical);
+		}
+
+		// Adds one action row to the tooltip's text list, laid out and keyed as
+		// the tooltip's own "Expand" row; empty on success, else why it could not.
 		std::string AddOneRow(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, SDK::UPanelWidget* body,
-			SDK::UWidget* sibling, const std::string& binding, const char* action, ObjectRef<SDK::UUserWidget>& out)
+			SDK::UWidget* model, const std::string& binding, const char* action, ObjectRef<SDK::UUserWidget>& out)
 		{
 			SDK::UClass* buttonClass = SDK::UWBP_ActionButton_C::StaticClass();
 			if (!buttonClass)
@@ -380,64 +412,46 @@ namespace CodexTooltipPin
 			// Attached first: the game's own construct code runs on attach and
 			// would otherwise overwrite what is set below.
 			row->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
-			SDK::UPanelSlot* placed = body->AddChild(row);
+			Apply(body->AddChild(row), LayoutOf(model ? model->Slot : nullptr));
 			out.Set(row);
 
-			// Laid out as the text rows beside it are: the slot's padding, size and
-			// alignment are the neighbour's own.
-			std::string slotNote = "no neighbouring slot to copy";
-			SDK::UPanelSlot* theirs = sibling ? sibling->Slot : nullptr;
-			if (placed && theirs && placed->IsA(SDK::UVerticalBoxSlot::StaticClass()) && theirs->IsA(SDK::UVerticalBoxSlot::StaticClass()))
-			{
-				SDK::UVerticalBoxSlot* mine = static_cast<SDK::UVerticalBoxSlot*>(placed);
-				SDK::UVerticalBoxSlot* neighbour = static_cast<SDK::UVerticalBoxSlot*>(theirs);
-				mine->SetPadding(neighbour->Padding);
-				mine->SetSize(neighbour->Size);
-				mine->SetHorizontalAlignment(neighbour->HorizontalAlignment);
-				mine->SetVerticalAlignment(neighbour->VerticalAlignment);
-				char padding[96];
-				snprintf(padding, sizeof(padding), "slot copied (padding %g/%g/%g/%g)",
-					neighbour->Padding.Left, neighbour->Padding.Top, neighbour->Padding.Right, neighbour->Padding.Bottom);
-				slotNote = padding;
-			}
-
-			// The key's own icon where the binding is one key the game has an icon
-			// for, set through the button's own SetActionIcon; where the button
-			// shows no icon image (or the game has none) the label names the binding.
+			// The key's icon through the button's input action, as the "Expand"
+			// row has it; the keys held with it are named in the label. Without
+			// an action for the key, the label names the whole binding.
 			const KeyLabel key = LabelOf(binding);
 			std::string why;
-			const SDK::FSlateBrush* brush = GameKeyBrush(key.gameKey, why);
-			SDK::UImage** iconSlot = CodexFields::ButtonActionIcon.In(properties, row);
-			const bool iconShown = brush && iconSlot && *iconSlot;
-			if (brush && !iconShown)
-				why = "the action button has no icon image";
-
+			const SDK::FDataTableRowHandle keyAction = KeyAction(properties, tooltip, key.key, why);
+			SDK::UWBP_ActionButton_C* button = static_cast<SDK::UWBP_ActionButton_C*>(row);
 			std::string label = action;
-			if (!iconShown && !key.spelled.empty())
+			if (keyAction.DataTable)
+			{
+				button->SetAction(keyAction, false);
+				button->SetInputActionWidgetVisibility(true);
+				button->SetActionNamePadding(true);
+				if (!key.modifiers.empty())
+					label += " (hold " + key.modifiers + ")";
+			}
+			else if (!key.spelled.empty())
+			{
 				label = key.spelled + ": " + label;
+			}
 			const std::wstring wide(label.begin(), label.end());
 			name->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(wide.c_str())));
 
-			if (brush)
-			{
-				SDK::UCrUW_ActionButton* button = static_cast<SDK::UCrUW_ActionButton*>(row);
-				button->SetActionIcon(*brush);
-				button->SetInputActionWidgetVisibility(false);
-			}
-
 			// The first few rows are logged at INFO for the in-game check, the rest
 			// at DEBUG: rows are added per hover.
-			const char* shape = iconShown ? "game icon" : why.c_str();
-			const std::string bodyClass = body->Class ? body->Class->GetName() : std::string("?");
+			const std::string shape = keyAction.DataTable ? "icon of input action '" + keyAction.RowName.ToString() + "'" : why;
+			const char* layout = model ? "laid out as the Expand row" : "default layout";
 			if (g_rowLogs++ < 6)
-				LOG_INFO("CodexTooltipHint: row '%s' added (key '%s', %s, %s, in a %s).", action, key.spelled.c_str(), shape, slotNote.c_str(), bodyClass.c_str());
+				LOG_INFO("CodexTooltipHint: row '%s' added (key '%s', %s, %s).", label.c_str(), key.spelled.c_str(), shape.c_str(), layout);
 			else
-				LOG_DEBUG("CodexTooltipHint: row '%s' added (key '%s', %s).", action, key.spelled.c_str(), shape);
+				LOG_DEBUG("CodexTooltipHint: row '%s' added (key '%s', %s).", label.c_str(), key.spelled.c_str(), shape.c_str());
 			return {};
 		}
 
-		// Adds the pin row, and the planner row when that key is set, to one tooltip;
-		// empty on success, else why the pin row could not be.
+		// Adds the pin row, and the planner row when that key is set, to one
+		// tooltip, above the spacer that closes its text; empty on success, else
+		// why the pin row could not be.
 		std::string AddRows(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, HintRow& entry)
 		{
 			std::string parents;
@@ -445,196 +459,37 @@ namespace CodexTooltipPin
 			if (!body)
 				return "the tooltip's text is not in a vertical list (found: " + (parents.empty() ? std::string("nothing") : parents) + ")";
 
-			// The text row the new ones are laid out like: "Crafted in", else the header.
-			SDK::USizeBox** crafted = CodexFields::TooltipCraftedIn.In(properties, tooltip);
-			SDK::UUserWidget** header = CodexFields::TooltipInfoWidget.In(properties, tooltip);
-			SDK::UWidget* sibling = (crafted && *crafted && (*crafted)->GetParent() == body) ? static_cast<SDK::UWidget*>(*crafted)
-				: (header ? static_cast<SDK::UWidget*>(*header) : nullptr);
+			// The tooltip's own "Expand" row, whose layout the new rows take.
+			SDK::UUserWidget** prompt = CodexFields::TooltipPrompt.In(properties, tooltip);
+			SDK::UUserWidget** expand = (prompt && *prompt) ? CodexFields::PromptExpandAction.In(properties, *prompt) : nullptr;
+			SDK::UWidget* model = expand ? *expand : nullptr;
 
-			const std::string pin = AddOneRow(properties, tooltip, body, sibling, CodexConfig::Config::GetGamePinKey(), "Pin to Codex", entry.row);
+			const int count = body->GetChildrenCount();
+			SDK::UWidget* closing = count > 0 ? body->GetChildAt(count - 1) : nullptr;
+			if (closing && !closing->IsA(SDK::USpacer::StaticClass()))
+				closing = nullptr;
+
+			const std::string pin = AddOneRow(properties, tooltip, body, model, CodexConfig::Config::GetGamePinKey(), "Pin to Codex", entry.row);
 			if (!pin.empty())
 				return pin;
 
 			const std::string plannerKey = CodexConfig::Config::GetGamePlannerKey();
 			if (!plannerKey.empty())
 			{
-				const std::string why = AddOneRow(properties, tooltip, body, sibling, plannerKey, "Open in Planner", entry.plannerRow);
+				const std::string why = AddOneRow(properties, tooltip, body, model, plannerKey, "Open in Planner", entry.plannerRow);
 				if (!why.empty())
 					HintProblem("planner row: " + why);
 			}
+
+			// The closing spacer goes back to the end, below the rows, in the
+			// slot it had.
+			if (closing)
+			{
+				const SlotLayout kept = LayoutOf(closing->Slot);
+				if (body->RemoveChild(closing))
+					Apply(body->AddChild(closing), kept);
+			}
 			return {};
-		}
-
-		// ---- Diagnostic: the tooltip's widget tree, written once per tooltip kind ----
-
-		bool g_dumped[3] = {};
-
-		std::string NameOf(const SDK::UObject* object)
-		{
-			return object ? object->GetName() : std::string("null");
-		}
-
-		std::string ClassOf(const SDK::UObject* object)
-		{
-			return object && object->Class ? object->Class->GetName() : std::string("null");
-		}
-
-		void* RawField(IPluginObjectProperties* properties, void* object, const char* name)
-		{
-			PluginPropertyHandle handle = object ? properties->FindPropertyOnObject(object, name) : nullptr;
-			return handle ? properties->GetPropertyRawPtr(object, handle) : nullptr;
-		}
-
-		std::string Margin(const SDK::FMargin& m)
-		{
-			char text[80];
-			snprintf(text, sizeof(text), "%g/%g/%g/%g", m.Left, m.Top, m.Right, m.Bottom);
-			return text;
-		}
-
-		std::string BrushText(const SDK::FSlateBrush* brush)
-		{
-			if (!brush)
-				return "no brush";
-			char text[320];
-			const SDK::FLinearColor& tint = brush->TintColor.SpecifiedColor;
-			snprintf(text, sizeof(text), "res=%s(%s) size=%gx%g drawAs=%d margin=%s tint=%.2f/%.2f/%.2f/%.2f",
-				NameOf(brush->ResourceObject).c_str(), ClassOf(brush->ResourceObject).c_str(),
-				static_cast<double>(brush->ImageSize.X), static_cast<double>(brush->ImageSize.Y), static_cast<int>(brush->DrawAs),
-				Margin(brush->Margin).c_str(), tint.R, tint.G, tint.B, tint.A);
-			return text;
-		}
-
-		std::string RowHandleText(const SDK::FDataTableRowHandle* handle)
-		{
-			if (!handle)
-				return "none";
-			return NameOf(handle->DataTable) + ":" + handle->RowName.ToString();
-		}
-
-		std::string TextOf(const SDK::FText* text)
-		{
-			return text ? SDK::UKismetTextLibrary::Conv_TextToString(*text).ToString() : std::string("-");
-		}
-
-		std::string SlotText(const SDK::UWidget* widget)
-		{
-			const SDK::UPanelSlot* slot = widget->Slot;
-			if (!slot)
-				return "slot=none";
-			std::string out = "slot=" + ClassOf(slot);
-			auto add = [&](const SDK::FMargin& padding, SDK::EHorizontalAlignment h, SDK::EVerticalAlignment v)
-			{
-				out += " pad=" + Margin(padding) + " h=" + std::to_string(static_cast<int>(h)) + " v=" + std::to_string(static_cast<int>(v));
-			};
-			if (slot->IsA(SDK::UVerticalBoxSlot::StaticClass()))
-			{
-				auto* s = static_cast<const SDK::UVerticalBoxSlot*>(slot);
-				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
-				out += " sizeRule=" + std::to_string(static_cast<int>(s->Size.SizeRule)) + " fill=" + std::to_string(s->Size.Value);
-			}
-			else if (slot->IsA(SDK::UHorizontalBoxSlot::StaticClass()))
-			{
-				auto* s = static_cast<const SDK::UHorizontalBoxSlot*>(slot);
-				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
-				out += " sizeRule=" + std::to_string(static_cast<int>(s->Size.SizeRule)) + " fill=" + std::to_string(s->Size.Value);
-			}
-			else if (slot->IsA(SDK::UOverlaySlot::StaticClass()))
-			{
-				auto* s = static_cast<const SDK::UOverlaySlot*>(slot);
-				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
-			}
-			else if (slot->IsA(SDK::UBorderSlot::StaticClass()))
-			{
-				auto* s = static_cast<const SDK::UBorderSlot*>(slot);
-				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
-			}
-			else if (slot->IsA(SDK::USizeBoxSlot::StaticClass()))
-			{
-				auto* s = static_cast<const SDK::USizeBoxSlot*>(slot);
-				add(s->Padding, s->HorizontalAlignment, s->VerticalAlignment);
-			}
-			return out;
-		}
-
-		// What a widget of a class the hint cares about holds: text, image,
-		// the key icon's input action, the action button's own settings.
-		std::string DetailText(IPluginObjectProperties* properties, SDK::UWidget* widget)
-		{
-			std::string out;
-			if (widget->IsA(SDK::UTextBlock::StaticClass()))
-			{
-				auto* text = static_cast<SDK::UTextBlock*>(widget);
-				out += " text=\"" + SDK::UKismetTextLibrary::Conv_TextToString(text->GetText()).ToString() + "\"";
-				if (auto* justify = static_cast<uint8_t*>(RawField(properties, widget, "Justification")))
-					out += " justify=" + std::to_string(*justify);
-			}
-			if (widget->IsA(SDK::UImage::StaticClass()))
-				out += " brush{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "Brush"))) + "}";
-			if (widget->IsA(SDK::UCommonActionWidget::StaticClass()))
-			{
-				if (auto* actions = static_cast<SDK::TArray<SDK::FDataTableRowHandle>*>(RawField(properties, widget, "InputActions")))
-				{
-					out += " inputActions=[";
-					for (int i = 0; i < actions->Num(); ++i)
-						out += (i ? "," : "") + RowHandleText(&(*actions)[i]);
-					out += "]";
-				}
-				if (auto* enhanced = static_cast<SDK::UObject**>(RawField(properties, widget, "EnhancedInputAction")))
-					out += " enhanced=" + NameOf(*enhanced);
-				out += " icon{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "Icon"))) + "}";
-				out += " rim{" + BrushText(static_cast<const SDK::FSlateBrush*>(RawField(properties, widget, "IconRimBrush"))) + "}";
-			}
-			if (widget->IsA(SDK::UCrUW_ActionButton::StaticClass()))
-			{
-				out += " buttonText=\"" + TextOf(static_cast<const SDK::FText*>(RawField(properties, widget, "ButtonText"))) + "\"";
-				for (const char* flag : { "bShouldBeVisible", "bOverrideDefaultColor", "bIsDefault", "bIsBlack", "ShowButton", "IsEnabled" })
-					if (auto* value = static_cast<bool*>(RawField(properties, widget, flag)))
-						out += std::string(" ") + flag + "=" + (*value ? "1" : "0");
-				for (const char* member : { "InputActionWidget", "ActionIcon", "ButtonImage" })
-					if (auto* value = static_cast<SDK::UObject**>(RawField(properties, widget, member)))
-						out += std::string(" ") + member + "=" + NameOf(*value);
-			}
-			for (const char* handle : { "ExpandHandle", "QuickTransferRowHandle", "ShowTooltipRowHandle" })
-				if (auto* value = static_cast<const SDK::FDataTableRowHandle*>(RawField(properties, widget, handle)))
-					out += std::string(" ") + handle + "=" + RowHandleText(value);
-			if (auto* count = static_cast<int32_t*>(RawField(properties, widget, "VisibleActionsCount")))
-				out += " VisibleActionsCount=" + std::to_string(*count);
-			return out;
-		}
-
-		void DumpWidget(IPluginObjectProperties* properties, SDK::UWidget* widget, int depth, int index)
-		{
-			if (!widget || depth > 24)
-				return;
-			const std::string indent(static_cast<size_t>(depth) * 2, ' ');
-			LOG_INFO("CodexTooltipDump: %s[%d] %s '%s' vis=%d %s%s", indent.c_str(), index, ClassOf(widget).c_str(), NameOf(widget).c_str(),
-				static_cast<int>(widget->Visibility), SlotText(widget).c_str(), DetailText(properties, widget).c_str());
-
-			if (widget->IsA(SDK::UPanelWidget::StaticClass()))
-			{
-				auto* panel = static_cast<SDK::UPanelWidget*>(widget);
-				const int count = panel->GetChildrenCount();
-				for (int i = 0; i < count; ++i)
-					DumpWidget(properties, panel->GetChildAt(i), depth + 1, i);
-			}
-			else if (widget->IsA(SDK::UUserWidget::StaticClass()))
-			{
-				auto* user = static_cast<SDK::UUserWidget*>(widget);
-				if (user->WidgetTree)
-					DumpWidget(properties, user->WidgetTree->RootWidget, depth + 1, 0);
-			}
-		}
-
-		void DumpTooltip(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, int kind)
-		{
-			if (kind < 1 || kind > 2 || g_dumped[kind])
-				return;
-			g_dumped[kind] = true;
-			LOG_INFO("CodexTooltipDump: ---- %s tooltip '%s' (%s), title '%s' ----", kind == 1 ? "recipe (rows added)" : "inventory slot",
-				NameOf(tooltip).c_str(), ClassOf(tooltip).c_str(), TooltipTitle(properties, tooltip).c_str());
-			DumpWidget(properties, tooltip, 0, 0);
-			LOG_INFO("CodexTooltipDump: ---- end ----");
 		}
 
 		// Whether the player's cursor is up: the only time a tooltip can be open.
@@ -675,14 +530,8 @@ namespace CodexTooltipPin
 			for (SDK::UUserWidget* tooltip : seen.shown)
 			{
 				const ObjectRef<SDK::UUserWidget> ref(tooltip);
-				const auto known = std::find_if(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; });
-				if (known != g_rows.end())
-				{
-					// A look after the rows went in, so the game's own setup has run.
-					if (g_dumpWidgets)
-						DumpTooltip(properties, tooltip, known->kind);
+				if (std::any_of(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; }))
 					continue;
-				}
 
 				HintRow entry;
 				entry.tooltip = ref;
@@ -694,7 +543,6 @@ namespace CodexTooltipPin
 
 				if (!slot.empty())
 				{
-					entry.kind = 2;
 					if (g_slotLogs++ < 3)
 						LOG_INFO("CodexTooltipHint: no row on a tooltip of the inventory slot '%s' (the game's own right-click).", slot.c_str());
 				}
@@ -703,8 +551,6 @@ namespace CodexTooltipPin
 					const std::string why = AddRows(properties, tooltip, entry);
 					if (!why.empty())
 						HintProblem(why);
-					else
-						entry.kind = 1;
 				}
 				g_rows.push_back(entry); // kept even without a row, so this tooltip is not looked at again
 			}
@@ -804,8 +650,6 @@ namespace CodexTooltipPin
 	{
 		if (!self->hooks->Input || !self->hooks->UI)
 			return;
-
-		g_dumpWidgets = CodexConfig::Config::GetDumpTooltipWidgets();
 
 		const char* key = CodexConfig::Config::GetGamePinKey();
 		LOG_DEBUG("CodexTooltipPin: registering game-menu pin keybind '%s'", key);
