@@ -242,6 +242,7 @@ namespace CodexTooltipPin
 			ObjectRef<SDK::UUserWidget> tooltip; // compared, never called
 			ObjectRef<SDK::UUserWidget> row;        // "Pin to Codex"
 			ObjectRef<SDK::UUserWidget> plannerRow; // "Open in Planner"
+			int kind = 0;                           // diagnostic: 1 rows added, 2 inventory slot
 		};
 
 		std::vector<HintRow> g_rows;
@@ -493,6 +494,133 @@ namespace CodexTooltipPin
 			return {};
 		}
 
+		// ---- Diagnostic: the hint rows' and the Expand row's geometry, once per tooltip kind ----
+
+		bool g_geometryDumped[3] = {};
+
+		std::string GeoName(const SDK::UObject* object)
+		{
+			if (!object)
+				return "null";
+			return (object->Class ? object->Class->GetName() : std::string("?")) + " '" + object->GetName() + "'";
+		}
+
+		void* GeoField(IPluginObjectProperties* properties, void* object, const char* name)
+		{
+			PluginPropertyHandle handle = object ? properties->FindPropertyOnObject(object, name) : nullptr;
+			return handle ? properties->GetPropertyRawPtr(object, handle) : nullptr;
+		}
+
+		std::string GeoMargin(const SDK::FMargin& m)
+		{
+			char text[80];
+			snprintf(text, sizeof(text), "%g/%g/%g/%g", m.Left, m.Top, m.Right, m.Bottom);
+			return text;
+		}
+
+		// Slot padding and alignment, desired and laid-out size, and the
+		// on-screen pixel rectangle; then what a size box overrides, a text's
+		// font size, an image or action icon's brush size.
+		std::string GeoLine(IPluginObjectProperties* properties, SDK::UWidget* widget)
+		{
+			if (!widget)
+				return "null";
+			char text[512];
+			const SDK::FVector2D desired = widget->GetDesiredSize();
+			const SDK::FGeometry geometry = widget->GetCachedGeometry();
+			const SDK::FVector2D local = SDK::USlateBlueprintLibrary::GetLocalSize(geometry);
+			SDK::FVector2D topLeft{}, bottomRight{}, viewport{};
+			SDK::USlateBlueprintLibrary::LocalToViewport(widget, geometry, SDK::FVector2D{ 0, 0 }, &topLeft, &viewport);
+			SDK::USlateBlueprintLibrary::LocalToViewport(widget, geometry, local, &bottomRight, &viewport);
+			snprintf(text, sizeof(text), "vis=%d desired=%.1fx%.1f local=%.1fx%.1f px=[%.0f,%.0f]-[%.0f,%.0f]",
+				static_cast<int>(widget->Visibility), desired.X, desired.Y, local.X, local.Y, topLeft.X, topLeft.Y, bottomRight.X, bottomRight.Y);
+			std::string out = GeoName(widget) + " " + text;
+
+			if (const SDK::UPanelSlot* slot = widget->Slot)
+			{
+				out += " slot=" + (slot->Class ? slot->Class->GetName() : std::string("?"));
+				if (auto* padding = static_cast<const SDK::FMargin*>(GeoField(properties, const_cast<SDK::UPanelSlot*>(slot), "Padding")))
+					out += " pad=" + GeoMargin(*padding);
+				if (auto* h = static_cast<const uint8_t*>(GeoField(properties, const_cast<SDK::UPanelSlot*>(slot), "HorizontalAlignment")))
+					out += " h=" + std::to_string(*h);
+				if (auto* v = static_cast<const uint8_t*>(GeoField(properties, const_cast<SDK::UPanelSlot*>(slot), "VerticalAlignment")))
+					out += " v=" + std::to_string(*v);
+			}
+			if (widget->IsA(SDK::USizeBox::StaticClass()))
+			{
+				const auto* box = static_cast<const SDK::USizeBox*>(widget);
+				snprintf(text, sizeof(text), " override{w=%s h=%s minW=%s minH=%s maxW=%s maxH=%s}",
+					box->bOverride_WidthOverride ? std::to_string(box->WidthOverride).c_str() : "-",
+					box->bOverride_HeightOverride ? std::to_string(box->HeightOverride).c_str() : "-",
+					box->bOverride_MinDesiredWidth ? std::to_string(box->MinDesiredWidth).c_str() : "-",
+					box->bOverride_MinDesiredHeight ? std::to_string(box->MinDesiredHeight).c_str() : "-",
+					box->bOverride_MaxDesiredWidth ? std::to_string(box->MaxDesiredWidth).c_str() : "-",
+					box->bOverride_MaxDesiredHeight ? std::to_string(box->MaxDesiredHeight).c_str() : "-");
+				out += text;
+			}
+			if (widget->IsA(SDK::UTextBlock::StaticClass()))
+			{
+				const auto* block = static_cast<const SDK::UTextBlock*>(widget);
+				snprintf(text, sizeof(text), " font=%s size=%g", block->Font.TypefaceFontName.ToString().c_str(), static_cast<double>(block->Font.Size));
+				out += text;
+			}
+			for (const char* brushName : { "Brush", "Icon" })
+			{
+				if (auto* brush = static_cast<const SDK::FSlateBrush*>(GeoField(properties, widget, brushName)))
+				{
+					snprintf(text, sizeof(text), " %s=%gx%g", brushName, static_cast<double>(brush->ImageSize.X), static_cast<double>(brush->ImageSize.Y));
+					out += text;
+				}
+			}
+			return out;
+		}
+
+		// One action button: itself, the size box around it, the icon's box,
+		// the icon and the label; then its parents up to the tooltip's root.
+		void DumpButton(IPluginObjectProperties* properties, const char* what, SDK::UUserWidget* button)
+		{
+			if (!button || !button->IsA(SDK::UWBP_ActionButton_C::StaticClass()))
+			{
+				LOG_INFO("CodexTooltipGeo: %s: none", what);
+				return;
+			}
+			LOG_INFO("CodexTooltipGeo: %s: %s", what, GeoLine(properties, button).c_str());
+			for (const char* part : { "SizeBox", "InputActionWidgetBox", "InputActionWidget", "ActionName" })
+			{
+				auto* child = static_cast<SDK::UWidget**>(GeoField(properties, button, part));
+				LOG_INFO("CodexTooltipGeo:   %s: %s", part, GeoLine(properties, child ? *child : nullptr).c_str());
+			}
+			int depth = 0;
+			for (SDK::UWidget* up = button->GetParent(); up && depth < 12; up = up->GetParent(), ++depth)
+				LOG_INFO("CodexTooltipGeo:   parent %d: %s", depth, GeoLine(properties, up).c_str());
+		}
+
+		void DumpGeometry(IPluginObjectProperties* properties, SDK::UUserWidget* tooltip, const HintRow& entry, int kind)
+		{
+			if (kind < 1 || kind > 2 || g_geometryDumped[kind])
+				return;
+			g_geometryDumped[kind] = true;
+			LOG_INFO("CodexTooltipGeo: ---- %s tooltip '%s', title '%s', viewport scale %.3f ----", kind == 1 ? "recipe (rows added)" : "inventory slot",
+				tooltip->GetName().c_str(), TooltipTitle(properties, tooltip).c_str(), SDK::UWidgetLayoutLibrary::GetViewportScale(tooltip));
+			LOG_INFO("CodexTooltipGeo: tooltip: %s", GeoLine(properties, tooltip).c_str());
+			SDK::UUserWidget** prompt = CodexFields::TooltipPrompt.In(properties, tooltip);
+			if (prompt && *prompt)
+			{
+				LOG_INFO("CodexTooltipGeo: prompt: %s", GeoLine(properties, *prompt).c_str());
+				int depth = 0;
+				for (SDK::UWidget* up = (*prompt)->GetParent(); up && depth < 12; up = up->GetParent(), ++depth)
+					LOG_INFO("CodexTooltipGeo:   parent %d: %s", depth, GeoLine(properties, up).c_str());
+			}
+			SDK::UUserWidget** expand = (prompt && *prompt) ? CodexFields::PromptExpandAction.In(properties, *prompt) : nullptr;
+			DumpButton(properties, "native Expand", expand ? *expand : nullptr);
+			if (kind == 1)
+			{
+				DumpButton(properties, "pin row", entry.row.Get());
+				DumpButton(properties, "planner row", entry.plannerRow.Get());
+			}
+			LOG_INFO("CodexTooltipGeo: ---- end ----");
+		}
+
 		// Whether the player's cursor is up: the only time a tooltip can be open.
 		bool CursorUp()
 		{
@@ -531,8 +659,13 @@ namespace CodexTooltipPin
 			for (SDK::UUserWidget* tooltip : seen.shown)
 			{
 				const ObjectRef<SDK::UUserWidget> ref(tooltip);
-				if (std::any_of(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; }))
+				const auto known = std::find_if(g_rows.begin(), g_rows.end(), [&](const HintRow& r) { return r.tooltip == ref; });
+				if (known != g_rows.end())
+				{
+					// A later look, so the tooltip has been laid out and painted.
+					DumpGeometry(properties, tooltip, *known, known->kind);
 					continue;
+				}
 
 				HintRow entry;
 				entry.tooltip = ref;
@@ -544,6 +677,7 @@ namespace CodexTooltipPin
 
 				if (!slot.empty())
 				{
+					entry.kind = 2;
 					if (g_slotLogs++ < 3)
 						LOG_INFO("CodexTooltipHint: no row on a tooltip of the inventory slot '%s' (the game's own right-click).", slot.c_str());
 				}
@@ -552,6 +686,8 @@ namespace CodexTooltipPin
 					const std::string why = AddRows(properties, tooltip, entry);
 					if (!why.empty())
 						HintProblem(why);
+					else
+						entry.kind = 1;
 				}
 				g_rows.push_back(entry); // kept even without a row, so this tooltip is not looked at again
 			}
