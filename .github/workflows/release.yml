@@ -1,12 +1,8 @@
 name: Build and Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Build and package only: no GitHub release, no Nexus upload'
-        type: boolean
-        default: false
+  push:
+    branches: [tmp/dry-run-sdk-workflow]
 
 jobs:
   release:
