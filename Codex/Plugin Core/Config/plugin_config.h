@@ -46,6 +46,13 @@ namespace CodexConfig
 		},
 		{
 			"Menu",
+			"GameTooltipHints",
+			ConfigValueType::Hidden,
+			"false",
+			"Whether the game's item tooltips get \"Pin to Codex\" and \"Open in Planner\" rows (off until their layout matches the game's own rows)"
+		},
+		{
+			"Menu",
 			"PinLayout",
 			ConfigValueType::Choice,
 			"Right",
@@ -257,6 +264,13 @@ namespace CodexConfig
 			if (s_self && s_self->config->ReadString(s_self, "Menu", "GamePlannerKey", buffer, sizeof(buffer), "Ctrl+RightMouseButton"))
 				return buffer;
 			return "Ctrl+RightMouseButton";
+		}
+
+		// Returns whether the game's item tooltips get the pin and planner hint
+		// rows (default off).
+		static bool GetGameTooltipHints()
+		{
+			return s_self ? s_self->config->ReadBool(s_self, "Menu", "GameTooltipHints", false) : false;
 		}
 
 		// Returns the screen edge pins start from: "Right" (default), "Left" or "Top".
