@@ -59,18 +59,12 @@ loader the plugin shows "Needs loader" and stays off.
   (`GamePinKey`) to pin the recipe that makes it. The new pin appears with the others. Only
   the item in the open tooltip is pinned, so nothing happens without one. It does nothing on
   an inventory slot's tooltip (your own inventory, or the one shown beside a machine), where
-  right-click is the game's own action. A `GamePinKey` you set earlier is kept. While the
-  tooltip is open and the pin would work, its text ends with a **Pin to Codex** row in the
-  game's own action-button style, with the key's icon from the game (the key spelled out when
-  the game has no icon for it), so the key is shown where you need it. The row sits in the
-  tooltip's text with the same padding as the rows above it. It follows `GamePinKey` and is
-  taken out again when the plugin unloads.
+  right-click is the game's own action. A `GamePinKey` you set earlier is kept.
 - **Open in Planner from the game's menus** -- on the same tooltips, **Ctrl + right-click**
   (`GamePlannerKey`) opens the production planner for that item, exactly as the Planner button
-  does (it uses the `Planner` choice). A second row, **Open in Planner**, shows the key. The
-  same rules as the pin apply: only items a recipe makes, and not on inventory slots. A plain
-  right-click still pins and does not also open the planner. Clear `GamePlannerKey` to turn the
-  planner key off.
+  does (it uses the `Planner` choice). The same rules as the pin apply: only items a recipe
+  makes, and not on inventory slots. A plain right-click still pins and does not also open the
+  planner. Clear `GamePlannerKey` to turn the planner key off.
 - **Edit pins in the game's screens** -- pinned windows used to be clickable only with the
   Codex or the Escape menu open. They are now also clickable and draggable while a game screen
   shows the mouse cursor: a machine's menu, the recipe station, the corporation terminal and
