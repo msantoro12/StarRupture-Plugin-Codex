@@ -24,9 +24,16 @@ namespace CodexIcons
 	// place, so the text after it does not move. Call from a render callback.
 	void Draw(IModLoaderImGui* imgui, const std::string& uniqueItemName, float iconSize);
 
-	// The image id of a texture, or 0 when the library cannot name it. Ids are
-	// plain numbers and are equal for the same texture, so two icons can be
-	// compared without holding either texture. Game thread; the texture is not
-	// kept.
+	// The image id of an item by its unique name, or 0 when there is no image
+	// table. Only names the image; nothing is read until it is drawn.
+	uint32_t ItemImage(const std::string& uniqueItemName);
+
+	// The image id of a texture, or 0 when the library cannot name it. Game
+	// thread; the texture is not kept.
 	uint32_t ImageOfTexture(SDK::UObject* texture);
+
+	// Whether an item id (from ItemImage) and a texture id (from ImageOfTexture)
+	// are the same picture. False for an unknown id, and for an item the library
+	// has not resolved yet. Any thread.
+	bool SameImage(uint32_t itemImage, uint32_t textureImage);
 }

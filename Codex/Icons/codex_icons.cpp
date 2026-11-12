@@ -51,4 +51,18 @@ namespace CodexIcons
 
 		return images->FromTexture(GetSelf(), static_cast<SDK::UTexture2D*>(texture));
 	}
+
+	uint32_t ItemImage(const std::string& uniqueItemName)
+	{
+		IPluginImages* images = ImageTable();
+		return images ? images->Item(GetSelf(), uniqueItemName.c_str()) : 0;
+	}
+
+	bool SameImage(uint32_t itemImage, uint32_t textureImage)
+	{
+		IPluginImages* images = ImageTable();
+		if (!images || !images->Canonical || itemImage == 0 || textureImage == 0)
+			return false;
+		return images->Canonical(itemImage) == textureImage;
+	}
 }

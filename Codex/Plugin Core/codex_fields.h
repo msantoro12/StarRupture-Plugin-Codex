@@ -27,7 +27,6 @@ namespace CodexFields
 	inline auto UIItemType        = CODEX_FIELD(UAuItemDataBase, UIItemType);
 	inline auto UniqueItemName    = CODEX_FIELD(UAuItemDataBase, UniqueItemName);
 	inline auto ItemName          = CODEX_FIELD(UAuItemDataBase, ItemName);
-	inline auto ItemIcon          = CODEX_FIELD(UAuItemDataBase, ItemIcon);
 	inline auto EntityType        = CODEX_FIELD(UAuActorPlacementData, EntityType);
 	inline auto BuildingType      = CODEX_FIELD(UCrBuildingData, Type);
 	inline auto BuildingName      = CODEX_FIELD(UCrBuildingData, BuildingName);
@@ -76,7 +75,7 @@ namespace CodexFields
 	// the plugin loads but builds no recipe database and opens no window; the
 	// menu and planner config entries are greyed out.
 	inline PluginMap::Feature RecipeCodex{ "codex", "Recipe codex",
-		KeysOf(UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
+		KeysOf(UIItemType, UniqueItemName, ItemName, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
 			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize),
@@ -93,7 +92,7 @@ namespace CodexFields
 	inline bool Resolve(IPluginSelf* self, IPluginHookScanner* scanner)
 	{
 		return PluginMap::ResolveFields(scanner, self,
-			UIItemType, UniqueItemName, ItemName, ItemIcon, EntityType, BuildingType, BuildingName,
+			UIItemType, UniqueItemName, ItemName, EntityType, BuildingType, BuildingName,
 			LinkedCollections, Recipes, RecipeBuildTime, RecipeDisplayText, CraftingParameters, CrafterToRecipeMap,
 			ItemCount, ItemData, LinkedList, EntityConfigPtr, EntityConfigRef, RecipeCollection,
 			SimpleItemSize, EntityTypeSize, CraftingParametersSize, NestedCollectionsSize);

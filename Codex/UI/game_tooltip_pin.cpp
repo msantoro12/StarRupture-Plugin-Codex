@@ -74,7 +74,7 @@ namespace CodexTooltipPin
 				const std::string& item = recipe.output.uniqueItemName;
 				if (!title.empty() && EqualsNoCase(recipe.output.displayName, title))
 					AddOnce(byName, item);
-				if (image != 0 && recipe.output.iconImage == image)
+				if (CodexIcons::SameImage(recipe.output.itemImage, image))
 					AddOnce(byIcon, item);
 			}
 

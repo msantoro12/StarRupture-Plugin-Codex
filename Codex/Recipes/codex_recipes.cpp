@@ -101,8 +101,7 @@ namespace CodexRecipes
 				ref.displayName    = CodexFields::DisplayNameOf(itemData);
 				if (ref.displayName.empty())
 					ref.displayName = ref.uniqueItemName;
-				if (const SDK::FSlateBrush* icon = CodexFields::ItemIcon.In(itemData))
-					ref.iconImage = CodexIcons::ImageOfTexture(icon->ResourceObject);
+				ref.itemImage = CodexIcons::ItemImage(ref.uniqueItemName);
 			}
 
 			if (ref.uniqueItemName.empty())
