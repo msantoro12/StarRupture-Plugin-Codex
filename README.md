@@ -6,8 +6,7 @@ what it produces.
 
 **Target:** Game client only
 
-**Requires:** ModLoader v1.23.0 or later (plugin interface v75). On an older
-loader the plugin shows "Needs loader" and stays off.
+**Requires:** ModLoader 1.24.0 or newer.
 
 ---
 

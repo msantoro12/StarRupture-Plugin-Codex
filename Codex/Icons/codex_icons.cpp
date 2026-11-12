@@ -29,14 +29,10 @@ namespace CodexIcons
 		if (!imgui)
 			return;
 
-		// A row scrolled out of view is not asked for: the id is made only when
-		// the icon can be seen.
-		PluginImageId id = 0;
-		if (IPluginImages* images = ImageTable())
-		{
-			if (imgui->IsRectVisible(iconSize, iconSize))
-				id = images->Item(GetSelf(), uniqueItemName.c_str());
-		}
+		// Item only hands out an id; the library reads the image when Image
+		// calls Get, and Image skips Get for a row that is scrolled out of view.
+		IPluginImages* images = ImageTable();
+		const PluginImageId id = images ? images->Item(GetSelf(), uniqueItemName.c_str()) : 0;
 
 		PluginImages::Image(imgui, GetHooks(), id, iconSize, iconSize);
 		imgui->SameLine(0.0f, kIconGap);
@@ -61,7 +57,7 @@ namespace CodexIcons
 	bool SameImage(uint32_t itemImage, uint32_t textureImage)
 	{
 		IPluginImages* images = ImageTable();
-		if (!images || !images->Canonical || itemImage == 0 || textureImage == 0)
+		if (!images || itemImage == 0 || textureImage == 0)
 			return false;
 		return images->Canonical(itemImage) == textureImage;
 	}
