@@ -449,10 +449,10 @@ namespace CodexUI
 		}
 
 		// Icon (if loaded) + name, as one line. Shared by every recipe list.
-		void RenderRecipeLabel(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
+		void RenderRecipeLabel(IModLoaderImGui* imgui,
 			const CodexRecipes::RecipeInfo& recipe, float iconSize)
 		{
-			CodexIcons::Draw(imgui, textures, recipe.output.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, recipe.output.uniqueItemName, iconSize);
 			imgui->Text(recipe.displayName.c_str());
 		}
 
@@ -461,7 +461,7 @@ namespace CodexUI
 		// produces that input, if one is known. Clicking the output row
 		// instead opens a popup listing every recipe that consumes it, so
 		// the user can browse "what uses this?" before navigating.
-		void RenderItemRow(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
+		void RenderItemRow(IModLoaderImGui* imgui,
 			const CodexRecipes::RecipeItemRef& item, float iconSize, float ratePerMinute, bool isOutput)
 		{
 			imgui->PushIDStr(item.uniqueItemName.c_str());
@@ -470,7 +470,7 @@ namespace CodexUI
 			PinOnRightClick(imgui, item.uniqueItemName, isOutput ? g_selectedNativeRecipe : nullptr);
 			imgui->SameLine(0.0f, 0.0f);
 
-			CodexIcons::Draw(imgui, textures, item.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, item.uniqueItemName, iconSize);
 
 			imgui->BeginGroup();
 			imgui->Text(item.displayName.c_str());
@@ -512,7 +512,7 @@ namespace CodexUI
 		// Renders the "used in..." popup opened from clicking an output
 		// item: a scrollable list of every recipe that consumes it, letting
 		// the user jump straight to one.
-		void RenderConsumersPopup(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
+		void RenderConsumersPopup(IModLoaderImGui* imgui)
 		{
 			if (g_openConsumersPopup)
 			{
@@ -541,7 +541,7 @@ namespace CodexUI
 					bool clicked = imgui->SelectableFull("##consumer_row", false, kSelectableFlags, 0.0f, 22.0f);
 					PinOnRightClick(imgui, consumer.output.uniqueItemName, consumer.nativeRecipe);
 					imgui->SameLine(0.0f, 0.0f);
-					RenderRecipeLabel(imgui, textures, consumer, 18.0f);
+					RenderRecipeLabel(imgui, consumer, 18.0f);
 					if (consumer.hasTierVariants)
 					{
 						char tierLabel[32];
@@ -854,8 +854,6 @@ namespace CodexUI
 				return;
 			std::vector<CodexRecipes::BuildingGroup> groups = CodexRecipes::GetBuildingGroups();
 
-			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
-
 			constexpr size_t kMaxResults = 10;
 			constexpr size_t kMaxBuildingResults = 3;
 
@@ -893,7 +891,7 @@ namespace CodexUI
 				PinOnRightClick(imgui, recipe->output.uniqueItemName, recipe->nativeRecipe);
 				SyncSearchHighlight(imgui, row, mouseMoved, arrowSteps != 0);
 				imgui->SameLine(0.0f, 0.0f);
-				RenderRecipeLabel(imgui, textures, *recipe, 18.0f);
+				RenderRecipeLabel(imgui, *recipe, 18.0f);
 
 				// Tiered recipes share a name - the building tells them apart.
 				imgui->SameLine(0.0f, 10.0f);
@@ -963,7 +961,7 @@ namespace CodexUI
 			imgui->SetItemTooltip("Open a production planner for this item in your browser.");
 		}
 
-		void RenderRecipeTab(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
+		void RenderRecipeTab(IModLoaderImGui* imgui)
 		{
 			CodexRecipes::RecipeInfo info;
 			if (!g_selectedNativeRecipe || !CodexRecipes::FindByNativeRecipe(g_selectedNativeRecipe, info))
@@ -1033,21 +1031,21 @@ namespace CodexUI
 					const float rate = info.buildTimeSeconds > 0.0f
 						? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 						: 0.0f;
-					RenderItemRow(imgui, textures, input, kIconSize, rate, false);
+					RenderItemRow(imgui, input, kIconSize, rate, false);
 				}
 
 				imgui->TableNextColumn();
-				RenderItemRow(imgui, textures, info.output, kIconSize, info.outputsPerMinute, true);
+				RenderItemRow(imgui, info.output, kIconSize, info.outputsPerMinute, true);
 
 				imgui->EndTable();
 			}
 
-			RenderConsumersPopup(imgui, textures);
+			RenderConsumersPopup(imgui);
 		}
 
 		// The recipes one building tier can craft, as a grid of icon rows.
 		// Left-click opens the recipe; right-click pins it.
-		void RenderTierRecipes(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
+		void RenderTierRecipes(IModLoaderImGui* imgui,
 			const CodexRecipes::BuildingTier& tier)
 		{
 			if (tier.recipes.empty())
@@ -1088,7 +1086,7 @@ namespace CodexUI
 						: "Click to view, right-click to pin");
 				imgui->SameLine(0.0f, 0.0f);
 
-				CodexIcons::Draw(imgui, textures, recipe.output.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, recipe.output.uniqueItemName, kIconSize);
 
 				imgui->BeginGroup();
 				imgui->Text(recipe.displayName.c_str());
@@ -1112,7 +1110,7 @@ namespace CodexUI
 			imgui->EndTable();
 		}
 
-		void RenderBuildingsTab(IModLoaderImGui* imgui, IPluginImGuiTextures* textures)
+		void RenderBuildingsTab(IModLoaderImGui* imgui)
 		{
 			if (!CodexRecipes::IsReady())
 			{
@@ -1164,7 +1162,7 @@ namespace CodexUI
 
 				if (selected->tiers.size() == 1)
 				{
-					RenderTierRecipes(imgui, textures, selected->tiers.front());
+					RenderTierRecipes(imgui, selected->tiers.front());
 				}
 				else if (imgui->BeginTabBar("##building_tiers", 0))
 				{
@@ -1175,7 +1173,7 @@ namespace CodexUI
 						const int flags = g_requestedTier == tier.tier ? kTabItemFlagsSetSelected : 0;
 						if (imgui->BeginTabItem(label, nullptr, flags))
 						{
-							RenderTierRecipes(imgui, textures, tier);
+							RenderTierRecipes(imgui, tier);
 							imgui->EndTabItem();
 						}
 					}
@@ -1212,8 +1210,6 @@ namespace CodexUI
 					ArrangePins(imgui);
 			}
 
-			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
-
 			const DetailTab requested = g_requestedTab;
 			g_requestedTab = DetailTab::None;
 
@@ -1221,12 +1217,12 @@ namespace CodexUI
 			{
 				if (imgui->BeginTabItem("Recipe", nullptr, requested == DetailTab::Recipe ? kTabItemFlagsSetSelected : 0))
 				{
-					RenderRecipeTab(imgui, textures);
+					RenderRecipeTab(imgui);
 					imgui->EndTabItem();
 				}
 				if (imgui->BeginTabItem("Buildings", nullptr, requested == DetailTab::Buildings ? kTabItemFlagsSetSelected : 0))
 				{
-					RenderBuildingsTab(imgui, textures);
+					RenderBuildingsTab(imgui);
 					imgui->EndTabItem();
 				}
 				imgui->EndTabBar();
@@ -2911,7 +2907,6 @@ namespace CodexUI
 				return;
 			}
 
-			IPluginImGuiTextures* textures = GetHooks() ? GetHooks()->ImGuiTextures : nullptr;
 			constexpr float kIconSize = 20.0f;
 
 			char line[256];
@@ -2923,7 +2918,7 @@ namespace CodexUI
 				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
 				// (The pin's own product is already pinned, so it has no hook.)
 				imgui->BeginGroup();
-				CodexIcons::Draw(imgui, textures, input.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, input.uniqueItemName, kIconSize);
 				const float rate = info.buildTimeSeconds > 0.0f
 					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 					: 0.0f;
@@ -2940,7 +2935,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			CodexIcons::Draw(imgui, textures, info.output.uniqueItemName, kIconSize);
+			CodexIcons::Draw(imgui, info.output.uniqueItemName, kIconSize);
 			if (info.outputsPerMinute > 0.0f)
 				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
 			else

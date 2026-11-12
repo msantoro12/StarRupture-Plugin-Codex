@@ -1,4 +1,5 @@
 #include "codex_recipes.h"
+#include "Icons/codex_icons.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/codex_fields.h"
 
@@ -100,6 +101,8 @@ namespace CodexRecipes
 				ref.displayName    = CodexFields::DisplayNameOf(itemData);
 				if (ref.displayName.empty())
 					ref.displayName = ref.uniqueItemName;
+				if (const SDK::FSlateBrush* icon = CodexFields::ItemIcon.In(itemData))
+					ref.iconImage = CodexIcons::ImageOfTexture(icon->ResourceObject);
 			}
 
 			if (ref.uniqueItemName.empty())
@@ -184,9 +187,9 @@ namespace CodexRecipes
 			return result;
 		}
 
-		// Object/package lookup trampolines (same as CodexIcons), resolved once
-		// via the AOB-scanned addresses the modloader exposes. Used to load
-		// building data / entity config packages nothing has loaded yet.
+		// Object/package lookup trampolines, resolved via the AOB-scanned
+		// addresses the modloader exposes. Used to load building data / entity
+		// config packages nothing has loaded yet.
 		using StaticFindObjectByNameFn = SDK::UObject*  (__fastcall*)(SDK::UClass*, SDK::UObject*, const wchar_t*, bool);
 		using FindPackageFn            = SDK::UPackage* (__fastcall*)(SDK::UObject*, const wchar_t*);
 		using PackageFullyLoadFn       = void           (__fastcall*)(SDK::UPackage*);
@@ -869,10 +872,6 @@ namespace CodexRecipes
 		g_recipes.clear();
 		g_buildingGroups.clear();
 		g_ready = false;
-	}
-
-	void Tick()
-	{
 	}
 
 	void OnSessionLoaded()

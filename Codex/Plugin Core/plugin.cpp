@@ -14,11 +14,9 @@ static IPluginSelf* g_self = nullptr;
 
 IPluginSelf* GetSelf() { return g_self; }
 
-// Drives CodexIcons::Tick() so icon loads/retries happen once per engine tick, and
-// CodexUI::Tick() so the saved pins are put back once the recipes are ready.
+// Drives CodexUI::Tick() so the saved pins are put back once the recipes are ready.
 static void OnEngineTick(float deltaSeconds)
 {
-	CodexIcons::Tick();
 	CodexUI::Tick();
 	CodexTooltipPin::Tick(deltaSeconds);
 }
@@ -97,7 +95,7 @@ extern "C" {
 			return true;
 		}
 
-		// Kick off the asset-registry scan that pre-loads item/recipe icons
+		// Tell the image library the item icons are the ones Codex draws
 		CodexIcons::Init(self);
 
 		// Recipe database + search/detail UI
@@ -133,7 +131,6 @@ extern "C" {
 		CodexTooltipPin::Shutdown(g_self);
 		CodexUI::Shutdown(g_self);
 		CodexRecipes::Shutdown();
-		CodexIcons::Shutdown();
 
 		g_self = nullptr;
 	}

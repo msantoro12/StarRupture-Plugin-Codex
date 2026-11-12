@@ -1,48 +1,54 @@
 #include "codex_icons.h"
-#include "Plugin Core/codex_fields.h"
+#include "Plugin Core/Helpers/plugin_helpers.h"
 
-#include "item_icons.h"
+#include "plugin_images.h"
+
+#include "Engine_classes.hpp"
 
 namespace CodexIcons
 {
 	namespace
 	{
-		std::string UniqueNameOf(SDK::UAuItemDataBase* item)
-		{
-			return CodexFields::UniqueNameOf(item);
-		}
+		constexpr float kIconGap = 6.0f;
 
-		const SDK::FSlateBrush* IconOf(SDK::UAuItemDataBase* item)
+		IPluginImages* ImageTable()
 		{
-			return CodexFields::ItemIcon.In(item);
+			IPluginHooks* hooks = GetHooks();
+			return hooks ? hooks->Images : nullptr;
 		}
-
-		ItemIcons::Loader g_icons;
 	}
 
 	void Init(IPluginSelf* self)
 	{
-		g_icons.Init(self, "CodexIcons", { &UniqueNameOf, &IconOf });
+		if (IPluginImages* images = ImageTable())
+			images->UseSets(self, PLUGIN_IMAGE_SET_ITEMS);
 	}
 
-	void Shutdown()
+	void Draw(IModLoaderImGui* imgui, const std::string& uniqueItemName, float iconSize)
 	{
-		g_icons.Shutdown();
+		if (!imgui)
+			return;
+
+		// A row scrolled out of view is not asked for: the id is made only when
+		// the icon can be seen.
+		PluginImageId id = 0;
+		if (IPluginImages* images = ImageTable())
+		{
+			if (imgui->IsRectVisible(iconSize, iconSize))
+				id = images->Item(GetSelf(), uniqueItemName.c_str());
+		}
+
+		PluginImages::Image(imgui, GetHooks(), id, iconSize, iconSize);
+		imgui->SameLine(0.0f, kIconGap);
 	}
 
-	void Tick()
+	uint32_t ImageOfTexture(SDK::UObject* texture)
 	{
-		g_icons.Tick();
-	}
+		IPluginImages* images = ImageTable();
+		if (!images || !texture || !SDK::UKismetSystemLibrary::IsValid(texture)
+			|| !texture->IsA(SDK::UTexture2D::StaticClass()))
+			return 0;
 
-	void Draw(IModLoaderImGui* imgui, IPluginImGuiTextures* textures,
-		const std::string& uniqueItemName, float iconSize)
-	{
-		g_icons.Draw(imgui, textures, uniqueItemName, iconSize);
-	}
-
-	bool IconIs(const std::string& uniqueItemName, const std::string& textureId)
-	{
-		return g_icons.IconIs(uniqueItemName, textureId);
+		return images->FromTexture(GetSelf(), static_cast<SDK::UTexture2D*>(texture));
 	}
 }
