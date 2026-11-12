@@ -43,10 +43,11 @@ loader the plugin shows "Needs loader" and stays off.
   you add while the pins are tucked is tucked with them. The first pin after none, and unpinning
   the last one, start the pins out again.
 
-- **Icons load when they are shown** <sup>[✦](#msantoro12)</sup> -- item icons are copied the first
-  time they are drawn, not all at launch, so Codex no longer holds the loading screen for them. A
-  row whose icon is still loading keeps its place, so nothing moves when the icon appears. Icons
-  stay loaded until the game closes or the plugin is reloaded.
+- **Icons come from the loader's image library** <sup>[✦](#msantoro12)</sup> -- item icons are
+  drawn from the ModLoader's shared image library, which reads each one the first time it is
+  shown and keeps a small copy for the session. Codex no longer loads or holds icons of its own,
+  and does not hold the loading screen for them. A row whose icon is still loading keeps its
+  place, so nothing moves when the icon appears.
 
 ---
 
