@@ -3,6 +3,7 @@
 #include "Recipes/codex_recipes.h"
 #include "Planner/codex_planner.h"
 #include "Icons/codex_icons.h"
+#include "plugin_images.h"
 #include "Plugin Core/Helpers/plugin_helpers.h"
 #include "Plugin Core/Config/plugin_config.h"
 #include "Plugin Core/codex_fields.h"
@@ -2912,7 +2913,7 @@ namespace CodexUI
 				return;
 			}
 
-			constexpr float kIconSize = 20.0f;
+			constexpr float kIconSize = PluginImages::kMinSize;
 
 			char line[256];
 			snprintf(line, sizeof(line), "%s  -  %.1fs", info.buildingName.c_str(), info.buildTimeSeconds);
