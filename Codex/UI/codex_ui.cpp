@@ -461,10 +461,13 @@ namespace CodexUI
 		// produces that input, if one is known. Clicking the output row
 		// instead opens a popup listing every recipe that consumes it, so
 		// the user can browse "what uses this?" before navigating.
+		// The row's ImGui id is its column and slot, never the item: items the
+		// game data leaves unnamed share one name, and two rows would collide.
 		void RenderItemRow(IModLoaderImGui* imgui,
-			const CodexRecipes::RecipeItemRef& item, float iconSize, float ratePerMinute, bool isOutput)
+			const CodexRecipes::RecipeItemRef& item, float iconSize, float ratePerMinute, bool isOutput, int slot)
 		{
-			imgui->PushIDStr(item.uniqueItemName.c_str());
+			imgui->PushIDStr(isOutput ? "output" : "input");
+			imgui->PushIDInt(slot);
 
 			bool clicked = imgui->SelectableFull("##item_row", false, kItemSelectableFlags, 0.0f, TwoLineRowHeight(imgui, iconSize));
 			PinOnRightClick(imgui, item.uniqueItemName, isOutput ? g_selectedNativeRecipe : nullptr);
@@ -487,6 +490,7 @@ namespace CodexUI
 			imgui->TextDisabled(sub);
 			imgui->EndGroup();
 
+			imgui->PopID();
 			imgui->PopID();
 
 			if (clicked)
@@ -1026,16 +1030,17 @@ namespace CodexUI
 				imgui->TableNextColumn();
 				if (info.inputs.empty())
 					imgui->TextDisabled("(none)");
-				for (const CodexRecipes::RecipeItemRef& input : info.inputs)
+				for (size_t i = 0; i < info.inputs.size(); ++i)
 				{
+					const CodexRecipes::RecipeItemRef& input = info.inputs[i];
 					const float rate = info.buildTimeSeconds > 0.0f
 						? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 						: 0.0f;
-					RenderItemRow(imgui, input, kIconSize, rate, false);
+					RenderItemRow(imgui, input, kIconSize, rate, false, static_cast<int>(i));
 				}
 
 				imgui->TableNextColumn();
-				RenderItemRow(imgui, info.output, kIconSize, info.outputsPerMinute, true);
+				RenderItemRow(imgui, info.output, kIconSize, info.outputsPerMinute, true, 0);
 
 				imgui->EndTable();
 			}
