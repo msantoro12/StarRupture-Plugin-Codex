@@ -19,10 +19,14 @@ namespace CodexRecipes
 	// One ingredient/output line within a recipe.
 	struct RecipeItemRef
 	{
+		// The item's key (CodexFields::ItemKeyOf): its unique name, or its asset
+		// name where the game leaves that unset. Empty when there is no item.
 		std::string uniqueItemName;
 		std::string displayName;
 		int32_t     count = 0;
-		uint32_t    itemImage = 0; // the image library's id for the item; 0 if unknown. Compared, never drawn
+		uint32_t    itemImage = 0; // the image library's id for the item (CodexIcons::ItemImage); 0 if none
+
+		bool HasItem() const { return !uniqueItemName.empty(); }
 	};
 
 	// A building that crafts a given recipe - enough to find it again in

@@ -24,17 +24,14 @@ namespace CodexIcons
 			images->UseSets(self, PLUGIN_IMAGE_SET_ITEMS);
 	}
 
-	void Draw(IModLoaderImGui* imgui, const std::string& uniqueItemName, float iconSize)
+	void Draw(IModLoaderImGui* imgui, uint32_t itemImage, float iconSize)
 	{
 		if (!imgui)
 			return;
 
-		// Item only hands out an id; the library reads the image when Image
-		// calls Get, and Image skips Get for a row that is scrolled out of view.
-		IPluginImages* images = ImageTable();
-		const PluginImageId id = images ? images->Item(GetSelf(), uniqueItemName.c_str()) : 0;
-
-		PluginImages::Image(imgui, GetHooks(), id, iconSize, iconSize);
+		// The library reads the image when Image calls Get, and Image skips Get
+		// for a row that is scrolled out of view.
+		PluginImages::Image(imgui, GetHooks(), itemImage, iconSize, iconSize);
 		imgui->SameLine(0.0f, kIconGap);
 	}
 
@@ -48,10 +45,10 @@ namespace CodexIcons
 		return images->FromTexture(GetSelf(), static_cast<SDK::UTexture2D*>(texture));
 	}
 
-	uint32_t ItemImage(const std::string& uniqueItemName)
+	uint32_t ItemImage(const std::string& itemKey)
 	{
 		IPluginImages* images = ImageTable();
-		return images ? images->Item(GetSelf(), uniqueItemName.c_str()) : 0;
+		return images && !itemKey.empty() ? images->Item(GetSelf(), itemKey.c_str()) : 0;
 	}
 
 	bool SameImage(uint32_t itemImage, uint32_t textureImage)

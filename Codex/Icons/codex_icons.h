@@ -19,14 +19,16 @@ namespace CodexIcons
 	// have them ready. Call once from PluginInit.
 	void Init(IPluginSelf* self);
 
-	// Draws the item's icon at the cursor, size by size, and moves on by the gap
-	// after it. An icon that is still loading, or an item with none, holds its
-	// place, so the text after it does not move. Call from a render callback.
-	void Draw(IModLoaderImGui* imgui, const std::string& uniqueItemName, float iconSize);
+	// Draws an item's icon (its id from ItemImage) at the cursor, size by size,
+	// and moves on by the gap after it. An icon that is still loading, or an item
+	// with none, holds its place, so the text after it does not move. Call from a
+	// render callback.
+	void Draw(IModLoaderImGui* imgui, uint32_t itemImage, float iconSize);
 
-	// The image id of an item by its unique name, or 0 when there is no image
-	// table. Only names the image; nothing is read until it is drawn.
-	uint32_t ItemImage(const std::string& uniqueItemName);
+	// The image id of an item by its key (CodexFields::ItemKeyOf), or 0 for no
+	// item or no image table. The one place an item's image is chosen. Only
+	// names the image; nothing is read until it is drawn.
+	uint32_t ItemImage(const std::string& itemKey);
 
 	// The image id of a texture, or 0 when the library cannot name it. Game
 	// thread; the texture is not kept.

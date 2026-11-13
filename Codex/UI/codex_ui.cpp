@@ -452,7 +452,7 @@ namespace CodexUI
 		void RenderRecipeLabel(IModLoaderImGui* imgui,
 			const CodexRecipes::RecipeInfo& recipe, float iconSize)
 		{
-			CodexIcons::Draw(imgui, recipe.output.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, recipe.output.itemImage, iconSize);
 			imgui->Text(recipe.displayName.c_str());
 		}
 
@@ -461,8 +461,8 @@ namespace CodexUI
 		// produces that input, if one is known. Clicking the output row
 		// instead opens a popup listing every recipe that consumes it, so
 		// the user can browse "what uses this?" before navigating.
-		// The row's ImGui id is its column and slot, never the item: items the
-		// game data leaves unnamed share one name, and two rows would collide.
+		// The row's ImGui id is its column and slot, never the item: the same
+		// item can sit in two rows, and two rows with one id would collide.
 		void RenderItemRow(IModLoaderImGui* imgui,
 			const CodexRecipes::RecipeItemRef& item, float iconSize, float ratePerMinute, bool isOutput, int slot)
 		{
@@ -473,7 +473,7 @@ namespace CodexUI
 			PinOnRightClick(imgui, item.uniqueItemName, isOutput ? g_selectedNativeRecipe : nullptr);
 			imgui->SameLine(0.0f, 0.0f);
 
-			CodexIcons::Draw(imgui, item.uniqueItemName, iconSize);
+			CodexIcons::Draw(imgui, item.itemImage, iconSize);
 
 			imgui->BeginGroup();
 			imgui->Text(item.displayName.c_str());
@@ -493,7 +493,7 @@ namespace CodexUI
 			imgui->PopID();
 			imgui->PopID();
 
-			if (clicked)
+			if (clicked && item.HasItem())
 			{
 				if (isOutput)
 				{
@@ -1091,7 +1091,7 @@ namespace CodexUI
 						: "Click to view, right-click to pin");
 				imgui->SameLine(0.0f, 0.0f);
 
-				CodexIcons::Draw(imgui, recipe.output.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, recipe.output.itemImage, kIconSize);
 
 				imgui->BeginGroup();
 				imgui->Text(recipe.displayName.c_str());
@@ -2923,7 +2923,7 @@ namespace CodexUI
 				// One group, so a right-click on the icon or the text pins the ingredient's recipe.
 				// (The pin's own product is already pinned, so it has no hook.)
 				imgui->BeginGroup();
-				CodexIcons::Draw(imgui, input.uniqueItemName, kIconSize);
+				CodexIcons::Draw(imgui, input.itemImage, kIconSize);
 				const float rate = info.buildTimeSeconds > 0.0f
 					? (static_cast<float>(input.count) / info.buildTimeSeconds) * 60.0f
 					: 0.0f;
@@ -2940,7 +2940,7 @@ namespace CodexUI
 
 			imgui->Separator();
 
-			CodexIcons::Draw(imgui, info.output.uniqueItemName, kIconSize);
+			CodexIcons::Draw(imgui, info.output.itemImage, kIconSize);
 			if (info.outputsPerMinute > 0.0f)
 				snprintf(line, sizeof(line), "%dx %s  (%.1f/min)", info.output.count, info.output.displayName.c_str(), info.outputsPerMinute);
 			else

@@ -97,19 +97,16 @@ namespace CodexRecipes
 
 			if (SDK::UAuItemDataBase* itemData = CodexFields::ItemOf(simpleItem))
 			{
-				ref.uniqueItemName = CodexFields::UniqueNameOf(itemData);
+				ref.uniqueItemName = CodexFields::ItemKeyOf(itemData);
 				ref.displayName    = CodexFields::DisplayNameOf(itemData);
 				if (ref.displayName.empty())
 					ref.displayName = ref.uniqueItemName;
 				ref.itemImage = CodexIcons::ItemImage(ref.uniqueItemName);
 			}
 
-			if (ref.uniqueItemName.empty())
-			{
-				ref.uniqueItemName = "Unknown";
-				if (ref.displayName.empty())
-					ref.displayName = "Unknown";
-			}
+			// No item object: nothing to name, draw or look up.
+			if (ref.displayName.empty())
+				ref.displayName = "Unknown";
 
 			return ref;
 		}
@@ -909,6 +906,9 @@ namespace CodexRecipes
 
 	bool FindProducerOfItem(const std::string& uniqueItemName, RecipeInfo& outRecipe)
 	{
+		if (uniqueItemName.empty())
+			return false;
+
 		std::lock_guard<std::mutex> lock(g_mutex);
 		const RecipeInfo* best = nullptr;
 		for (const RecipeInfo& recipe : g_recipes)
@@ -927,6 +927,8 @@ namespace CodexRecipes
 	std::vector<RecipeInfo> FindConsumersOfItem(const std::string& uniqueItemName)
 	{
 		std::vector<RecipeInfo> result;
+		if (uniqueItemName.empty())
+			return result;
 
 		std::lock_guard<std::mutex> lock(g_mutex);
 		for (const RecipeInfo& recipe : g_recipes)

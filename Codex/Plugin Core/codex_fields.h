@@ -12,6 +12,7 @@
 #include "plugin_map.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Every member of a game class Codex reads, taken from the loader's map for the
@@ -109,11 +110,35 @@ namespace CodexFields
 		return ValueOr<int32_t>(ItemCount, &item);
 	}
 
-	// An item's unique name and its localized name. Empty when unresolved.
+	// An item's unique name and its localized name. Empty when unresolved. A
+	// null name is empty too: it would read "None", one name every unnamed item
+	// shares, so it names no item.
 	inline std::string UniqueNameOf(const SDK::UAuItemDataBase* item)
 	{
 		const SDK::FName* name = UniqueItemName.In(static_cast<const void*>(item));
-		return name ? name->ToString() : std::string();
+		return name && !name->IsNone() ? name->ToString() : std::string();
+	}
+
+	// The one name Codex knows an item by: its unique name, or, where the game
+	// leaves that unset (ammo, the building blueprints), its asset name
+	// ("Default__I_AmmoItem_C" -> "I_AmmoItem"), which the image library takes
+	// as well. Empty for no item. Game thread.
+	inline std::string ItemKeyOf(const SDK::UAuItemDataBase* item)
+	{
+		if (!item)
+			return std::string();
+		std::string key = UniqueNameOf(item);
+		if (!key.empty())
+			return key;
+
+		key = item->GetName();
+		constexpr std::string_view kDefaultPrefix = "Default__";
+		constexpr std::string_view kClassSuffix = "_C";
+		if (key.starts_with(kDefaultPrefix))
+			key.erase(0, kDefaultPrefix.size());
+		if (key.ends_with(kClassSuffix))
+			key.erase(key.size() - kClassSuffix.size());
+		return key;
 	}
 
 	inline std::string DisplayNameOf(const SDK::UAuItemDataBase* item)
