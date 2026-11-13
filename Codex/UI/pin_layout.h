@@ -504,6 +504,17 @@ namespace CodexPinLayout
 		bool pinsTucked = false;
 	};
 
+	// Whether the screen counts as a menu for the arrow: the Escape menu, or a
+	// game menu with the game cursor up. The loader gives ImGui the mouse on
+	// exactly those screens (its PAUSE_MENU and CURSOR_UP bits), so the arrow
+	// shows only where it can be clicked. That holds for the build menu too: the
+	// loader reports the cursor up there while it sees the menu active, and
+	// without that the arrow could not be clicked, so it stays hidden.
+	inline bool PinLayerMenuUp(bool pauseMenu, bool gameMenu, bool cursorUp)
+	{
+		return pauseMenu || (gameMenu && cursorUp);
+	}
+
 	inline PinLayerState PinLayerNow(int pinCount, bool tuckSet, bool menuUp, bool arrowAvailable)
 	{
 		PinLayerState state;

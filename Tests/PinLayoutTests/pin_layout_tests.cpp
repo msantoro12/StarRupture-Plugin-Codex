@@ -1178,6 +1178,29 @@ int main()
 			Check(!expanded.pinsTucked, "expanded pins show outside a menu", "expanded");
 		}
 
+		// Which screens count as a menu for the arrow. The build menu comes with the
+		// loader's any-menu bit; the arrow shows there only with the cursor up, the
+		// state the loader gives ImGui the mouse in.
+		{
+			for (int pause = 0; pause <= 1; ++pause)
+				for (int menu = 0; menu <= 1; ++menu)
+					for (int cursor = 0; cursor <= 1; ++cursor)
+						Check(PinLayerMenuUp(pause != 0, menu != 0, cursor != 0) == ((pause || menu) && (pause || cursor)),
+							"the arrow's menus: the Escape menu, or a game menu with the cursor up",
+							"pause " + std::to_string(pause) + ", menu " + std::to_string(menu) + ", cursor " + std::to_string(cursor));
+
+			const PinLayerState buildCursor = PinLayerNow(3, false, PinLayerMenuUp(false, true, true), true);
+			Check(buildCursor.arrowShown, "the build menu with the cursor up shows the arrow", "build menu, cursor");
+			const PinLayerState buildNoCursor = PinLayerNow(3, false, PinLayerMenuUp(false, true, false), true);
+			Check(!buildNoCursor.arrowShown, "the build menu without the cursor shows no arrow, which could not be clicked", "build menu, no cursor");
+			const PinLayerState buildTucked = PinLayerNow(3, true, PinLayerMenuUp(false, true, false), true);
+			Check(!buildTucked.arrowShown && buildTucked.pinsTucked, "tucked pins stay tucked in the build menu without the cursor", "build menu, tucked");
+			const PinLayerState buildNoPins = PinLayerNow(0, false, PinLayerMenuUp(false, true, true), true);
+			Check(!buildNoPins.arrowShown, "the build menu with no pins shows no arrow", "build menu, no pins");
+			const PinLayerState gameplay = PinLayerNow(3, false, PinLayerMenuUp(false, false, false), true);
+			Check(!gameplay.arrowShown, "plain gameplay shows no arrow", "gameplay");
+		}
+
 		// The saved tuck's text: what is written reads back, and anything else is not tucked.
 		Check(PinsTuckedFromText(PinsTuckedText(true)), "a saved tuck reads back tucked", "text on");
 		Check(!PinsTuckedFromText(PinsTuckedText(false)), "a saved expand reads back not tucked", "text off");

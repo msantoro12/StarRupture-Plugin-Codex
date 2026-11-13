@@ -1,6 +1,7 @@
 #pragma once
 
 #include "plugin_interface.h"
+#include "UI/pin_layout.h"
 
 // Pinning from the game's own menus (recipe station, company delivery panel,
 // machine menus). While the game's item tooltip is open, the pin key
@@ -26,10 +27,11 @@ namespace CodexTooltipPin
 	inline constexpr uint64_t kPinLayerMenus = PLUGIN_UI_PAUSE_MENU | PLUGIN_UI_ANY_MENU;
 
 	// True while a game menu is up and the game cursor with it, so the pin layer
-	// arrow never shows in plain gameplay.
-	inline constexpr bool PinLayerMenuUp(uint64_t state)
+	// arrow never shows in plain gameplay (CodexPinLayout::PinLayerMenuUp).
+	inline bool PinLayerMenuUp(uint64_t state)
 	{
-		return (state & kPinLayerMenus) != 0 && (state & kUIStateMask) != 0;
+		return CodexPinLayout::PinLayerMenuUp((state & PLUGIN_UI_PAUSE_MENU) != 0,
+			(state & PLUGIN_UI_ANY_MENU) != 0, (state & PLUGIN_UI_CURSOR_UP) != 0);
 	}
 
 	// Starts or stops asking the loader for the menu-layer bits. Idempotent.
